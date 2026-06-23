@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0E1014" />
+<!-- CSP: разрешён только инлайн-код самого приложения и Telegram SDK; внешняя сеть запрещена (connect-src 'self').
+     frame-ancestors намеренно не задан, чтобы не сломать встраивание в Telegram. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'" />
 <title>Деньги — личный учёт</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
@@ -159,7 +162,11 @@ svg.chart{display:block;width:100%}
 var KEY="pm-finance-v1", TKEY="pm-finance-theme-v1";
 /* ===== Telegram Mini App ===== */
 var TG=(window.Telegram&&window.Telegram.WebApp)?window.Telegram.WebApp:null;
-var OWNER_ID=0; /* впиши сюда свой Telegram ID (число), чтобы приложение открывалось только у тебя. 0 = без замка; данные у каждого пользователя всё равно свои */
+var OWNER_ID=0; /* впиши сюда свой Telegram ID (число), чтобы приложение открывалось только у тебя. 0 = без замка.
+  ВНИМАНИЕ: это мягкий клиентский UX-замок, а НЕ авторизация — его можно обойти, открыв страницу вне Telegram
+  или поправив код в браузере. Настоящая приватность здесь обеспечивается тем, что CloudStorage у каждого
+  пользователя свой (чужой не увидит твои данные). Реальная защита доступа потребовала бы серверной проверки
+  подписи initData — для статического файла на GitHub Pages это вне рамок. Секретов/токенов в этом файле нет и быть не должно. */
 var hasCloud=!!(TG&&TG.initData&&TG.CloudStorage);
 var tgUserId=null, CHUNK=3500, prevN={};
 function cloudGet(k){return new Promise(function(res){try{TG.CloudStorage.getItem(k,function(e,v){res(e?null:(v||null));});}catch(_){res(null);}});}
@@ -195,12 +202,24 @@ var mem={};
 function sget(k){try{var v=localStorage.getItem(k);return v==null?null:v;}catch(e){return (k in mem)?mem[k]:null;}}
 function sset(k,v){try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}}
 function emptyData(){return{transactions:[],investments:[]};}
+/* ограничения ввода/импорта — защита от мусора и переполнения чанков CloudStorage */
+var NOTE_MAX=140,NAME_MAX=40,TYPE_MAX=24,CAT_MAX=40,AMT_MAX=1e12,MAX_TX=5000,MAX_INV=500;
+function clampStr(s,max){return String(s==null?"":s).slice(0,max);}
+function clampAmt(n){n=Number(n);if(!isFinite(n)||n<0)return 0;return Math.round(Math.min(n,AMT_MAX));}
+function safeId(id){return (typeof id==="string"&&/^[A-Za-z0-9_-]{1,32}$/.test(id))?id:uid();}
+function validDate(d){return (typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d))?d:null;}
 function sanitize(o){
- if(!o||!Array.isArray(o.transactions))return null;
- return{
-  transactions:o.transactions.filter(function(t){return t&&t.date&&t.type&&t.amount!=null;}).map(function(t){return{id:t.id||uid(),date:t.date,type:t.type==="Доход"?"Доход":"Расход",category:t.category||"Прочие расходы",amount:Number(t.amount)||0,note:t.note||""};}),
-  investments:Array.isArray(o.investments)?o.investments.map(function(i){return{id:i.id||uid(),name:i.name||"Актив",type:i.type||"Прочее",invested:Number(i.invested)||0,current:Number(i.current)||0};}):[]
- };
+ if(!o||typeof o!=="object"||!Array.isArray(o.transactions))return null;
+ var transactions=o.transactions.slice(0,MAX_TX).map(function(t){
+  if(!t||typeof t!=="object")return null;
+  var dt=validDate(t.date);if(!dt||t.amount==null)return null;
+  return{id:safeId(t.id),date:dt,type:t.type==="Доход"?"Доход":"Расход",category:clampStr(t.category||"Прочие расходы",CAT_MAX),amount:clampAmt(t.amount),note:clampStr(t.note||"",NOTE_MAX)};
+ }).filter(Boolean);
+ var investments=Array.isArray(o.investments)?o.investments.slice(0,MAX_INV).map(function(i){
+  if(!i||typeof i!=="object")return null;
+  return{id:safeId(i.id),name:clampStr(i.name||"Актив",NAME_MAX),type:clampStr(i.type||"Прочее",TYPE_MAX),invested:clampAmt(i.invested),current:clampAmt(i.current)};
+ }).filter(Boolean):[];
+ return{transactions:transactions,investments:investments};
 }
 function loadData(){var r=sget(KEY);if(!r)return emptyData();try{var p=JSON.parse(r);return(p&&Array.isArray(p.transactions))?p:emptyData();}catch(e){return emptyData();}}
 
@@ -301,7 +320,7 @@ function txRowHTML(t){var inc=t.type==="Доход",col=inc?"var(--green)":cc(t.
  return "<div class='txrow'><div class='tx-ico' style='background:"+tint+";color:"+col+"'>"+ic(inc?"up":"down",16)+"</div>"+
   "<div class='tx-main'><div class='tx-cat'>"+esc(t.category)+"</div><div class='tx-sub'>"+esc(dl)+(t.note?" · "+esc(t.note):"")+"</div></div>"+
   "<div class='tx-amt mono' style='color:"+(inc?"var(--green)":"var(--ink)")+"'>"+(inc?"+":"−")+rub(t.amount)+"</div>"+
-  "<button class='tx-del' data-act='del-tx' data-id='"+t.id+"'>"+ic("trash",15)+"</button></div>";
+  "<button class='tx-del' data-act='del-tx' data-id='"+esc(t.id)+"'>"+ic("trash",15)+"</button></div>";
 }
 
 /* ---------- views ---------- */
@@ -373,7 +392,7 @@ function invHTML(D){
  var form="";
  if(state.invForm){
   form="<div style='margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--bg);border-radius:12px;padding:12px'>"+
-   "<input id='inv-name' class='input' placeholder='Название' style='grid-column:span 2'>"+
+   "<input id='inv-name' class='input' maxlength='40' placeholder='Название' style='grid-column:span 2'>"+
    "<select id='inv-type' class='select' style='grid-column:span 2'>"+TYPES.map(function(t){return "<option>"+t+"</option>";}).join("")+"</select>"+
    "<input id='inv-amt' class='input amount-input' inputmode='numeric' placeholder='Вложено, ₽'>"+
    "<input id='inv-cur' class='input amount-input' inputmode='numeric' placeholder='Сейчас, ₽'>"+
@@ -384,7 +403,7 @@ function invHTML(D){
   rows+="<div class='invrow "+(idx?"bt":"")+"'><div class='inv-badge'>"+esc(iv.name.slice(0,2).toUpperCase())+"</div>"+
    "<div class='tx-main'><div class='tx-cat'>"+esc(iv.name)+"</div><div class='tx-sub'>"+esc(iv.type)+" · вложено "+rub(iv.invested)+"</div></div>"+
    "<div style='text-align:right'><div class='mono' style='font-size:14px;font-weight:600'>"+rub(iv.current)+"</div><div class='mono' style='font-size:12px;font-weight:600;color:"+(up?"var(--green)":"var(--red)")+"'>"+(up?"+":"")+ret.toFixed(1)+"%</div></div>"+
-   "<button class='tx-del' data-act='del-inv' data-id='"+iv.id+"'>"+ic("trash",15)+"</button></div>";
+   "<button class='tx-del' data-act='del-inv' data-id='"+esc(iv.id)+"'>"+ic("trash",15)+"</button></div>";
  });
  if(state.data.investments.length===0)rows="<div class='empty'>Активов пока нет</div>";
  h+="<div class='card p16'><div class='chead' style='margin-bottom:8px'><div class='ctitle'>Активы</div><button class='linkbtn' data-act='inv-toggle'>"+ic("plus",14)+" Добавить</button></div>"+form+rows+"</div>";
@@ -420,7 +439,7 @@ function openAdd(){
   "<div class='field'><span class='flabel'>Сумма</span><div class='amount-wrap'><input id='add-amount' class='amount-big amount-input' inputmode='numeric' placeholder='0' autofocus><span class='cur'>₽</span></div></div>"+
   "<div class='field'><span class='flabel'>Категория</span><select id='add-cat' class='select'>"+catOptions(EXPENSE)+"</select></div>"+
   "<div class='field'><span class='flabel'>Дата</span><input id='add-date' class='input' type='date' value='"+today()+"'></div>"+
-  "<div class='field'><span class='flabel'>Заметка <span style='color:var(--faint)'>(необязательно)</span></span><input id='add-note' class='input' type='text' placeholder='Например: магазин у дома'></div>"+
+  "<div class='field'><span class='flabel'>Заметка <span style='color:var(--faint)'>(необязательно)</span></span><input id='add-note' class='input' type='text' maxlength='140' placeholder='Например: магазин у дома'></div>"+
   "<div class='row2'><button class='btn ghost' data-act='modal-close'>Отмена</button><button class='btn primary' data-act='add-save'>Добавить</button></div></div></div>";
  var d=document.createElement("div");d.innerHTML=html;document.body.appendChild(d.firstChild);
 }
@@ -432,7 +451,7 @@ function openSettings(){
    "<button id='th-light' class='btn sm' style='background:"+(th==="light"?"var(--ink)":"var(--bg)")+";color:"+(th==="light"?"var(--card)":"var(--sub)")+"' data-act='set-theme' data-t='light'>"+ic("sun",15)+"Светлая</button>"+
    "<button id='th-dark' class='btn sm' style='background:"+(th==="dark"?"var(--violet)":"var(--bg)")+";color:"+(th==="dark"?"#fff":"var(--sub)")+"' data-act='set-theme' data-t='dark'>"+ic("moon",15)+"Тёмная</button></div>"+
   (hasCloud
-    ? "<div class='section-cap'>Синхронизация Telegram</div><p class='note'>Данные синхронизируются с твоим Telegram автоматически — видны только тебе и сразу на всех твоих устройствах.<br>Твой ID: <b>"+(tgUserId||"—")+"</b></p>"
+    ? "<div class='section-cap'>Синхронизация Telegram</div><p class='note'>Данные синхронизируются с твоим Telegram автоматически — видны только тебе и сразу на всех твоих устройствах.<br>Твой ID: <b>"+esc(String(tgUserId||"—"))+"</b></p>"
     : "<p class='note'>Данные хранятся на этом устройстве. Чтобы перенести на телефон/ПК — скачай копию и загрузи на другом устройстве.</p>")+
   "<div class='section-cap'>Сделать копию</div><div class='row2' style='margin-bottom:20px'>"+
    "<button class='btn sm ink' data-act='set-download'>"+ic("dl",15)+"Скачать файл</button>"+
@@ -454,7 +473,7 @@ function toast(m){var ex=document.querySelector(".toast");if(ex)ex.remove();var 
 
 /* ---------- actions ---------- */
 function shift(delta){var d=new Date(state.cursor.y,state.cursor.m+delta,1);state.cursor={y:d.getFullYear(),m:d.getMonth()};paint();}
-function readNum(id){var el=document.getElementById(id);return el?(parseInt((el.value||"").replace(/\D/g,""))||0):0;}
+function readNum(id){var el=document.getElementById(id);if(!el)return 0;var n=parseInt((el.value||"").replace(/\D/g,"").slice(0,13))||0;return n>AMT_MAX?AMT_MAX:n;}
 function val(id){var el=document.getElementById(id);return el?el.value:"";}
 
 function doRestore(obj){var c=sanitize(obj);if(c){state.data=c;persist();closeModal();var ts=state.data.transactions.slice().sort(function(a,b){return a.date<b.date?1:-1;})[0];if(ts){var dd=new Date(ts.date+"T00:00:00");state.cursor={y:dd.getFullYear(),m:dd.getMonth()};}paint();toast("Восстановлено");}else toast("Файл не подходит");}
@@ -472,11 +491,11 @@ document.addEventListener("click",function(e){
  else if(a==="del-tx"){var id=t.getAttribute("data-id");state.data.transactions=state.data.transactions.filter(function(x){return x.id!==id;});persist();paint();}
  else if(a==="del-inv"){var iid=t.getAttribute("data-id");state.data.investments=state.data.investments.filter(function(x){return x.id!==iid;});persist();paint();}
  else if(a==="inv-toggle"){state.invForm=!state.invForm;paint();}
- else if(a==="inv-save"){var nm=val("inv-name").trim(),iv=readNum("inv-amt"),cu=readNum("inv-cur"),ty=val("inv-type");if(!nm||iv<=0){toast("Впиши название и сумму");return;}state.data.investments.push({id:uid(),name:nm,type:ty||"Прочее",invested:iv,current:cu});state.invForm=false;persist();paint();toast("Актив добавлен");}
+ else if(a==="inv-save"){var nm=clampStr(val("inv-name").trim(),NAME_MAX),iv=readNum("inv-amt"),cu=readNum("inv-cur"),ty=clampStr(val("inv-type"),TYPE_MAX);if(!nm||iv<=0){toast("Впиши название и сумму");return;}state.data.investments.push({id:uid(),name:nm,type:ty||"Прочее",invested:iv,current:cu});state.invForm=false;persist();paint();toast("Актив добавлен");}
  else if(a==="overlay-close"){if(e.target.classList.contains("overlay"))closeModal();}
  else if(a==="modal-close"){closeModal();}
  else if(a==="add-type"){var ty2=t.getAttribute("data-type"),m=document.getElementById("modal-add");if(!m)return;m.setAttribute("data-type",ty2);m.style.setProperty("--accent",ty2==="Доход"?"var(--green)":"var(--red)");var segs=m.querySelectorAll(".seg-btn");segs.forEach(function(b){b.classList.toggle("active",b.getAttribute("data-type")===ty2);});document.getElementById("add-cat").innerHTML=catOptions(ty2==="Доход"?INCOME:EXPENSE);}
- else if(a==="add-save"){var m2=document.getElementById("modal-add"),type=m2?m2.getAttribute("data-type"):"Расход",amount=readNum("add-amount"),category=val("add-cat"),date=val("add-date"),note=val("add-note").trim();if(!category||amount<=0||!date){toast("Заполни сумму и категорию");return;}state.data.transactions.unshift({id:uid(),date:date,type:type,category:category,amount:amount,note:note});state.cursor={y:new Date(date+"T00:00:00").getFullYear(),m:new Date(date+"T00:00:00").getMonth()};persist();closeModal();paint();toast("Добавлено");}
+ else if(a==="add-save"){var m2=document.getElementById("modal-add"),type=m2?m2.getAttribute("data-type"):"Расход",amount=readNum("add-amount"),category=clampStr(val("add-cat"),CAT_MAX),date=val("add-date"),note=clampStr(val("add-note").trim(),NOTE_MAX);if(!category||amount<=0||!validDate(date)){toast("Заполни сумму и категорию");return;}state.data.transactions.unshift({id:uid(),date:date,type:type,category:category,amount:amount,note:note});state.cursor={y:new Date(date+"T00:00:00").getFullYear(),m:new Date(date+"T00:00:00").getMonth()};persist();closeModal();paint();toast("Добавлено");}
  else if(a==="set-theme"){var tt=t.getAttribute("data-t");setTheme(tt);var bl=document.getElementById("th-light"),bd=document.getElementById("th-dark");if(bl&&bd){bl.style.background=tt==="light"?"var(--ink)":"var(--bg)";bl.style.color=tt==="light"?"var(--card)":"var(--sub)";bd.style.background=tt==="dark"?"var(--violet)":"var(--bg)";bd.style.color=tt==="dark"?"#fff":"var(--sub)";}paint();}
  else if(a==="set-download"){try{var blob=new Blob([JSON.stringify(state.data,null,2)],{type:"application/json"});var url=URL.createObjectURL(blob);var ad=document.createElement("a");ad.href=url;ad.download="dengi-backup-"+today()+".json";document.body.appendChild(ad);ad.click();ad.remove();URL.revokeObjectURL(url);toast("Файл скачан");}catch(err){toast("Не удалось скачать");}}
  else if(a==="set-copy"){if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(JSON.stringify(state.data)).then(function(){toast("Скопировано");},function(){var tx=document.getElementById("set-text");if(tx)tx.value=JSON.stringify(state.data);toast("Скопируй текст вручную");});}else{var tx2=document.getElementById("set-text");if(tx2)tx2.value=JSON.stringify(state.data);toast("Текст в поле — скопируй");}}
@@ -487,7 +506,7 @@ document.addEventListener("click",function(e){
 });
 
 document.addEventListener("input",function(e){
- var el=e.target;if(el&&el.classList&&el.classList.contains("amount-input")){var d=(el.value||"").replace(/\D/g,"");el.value=d?Number(d).toLocaleString("ru-RU"):"";}
+ var el=e.target;if(el&&el.classList&&el.classList.contains("amount-input")){var d=(el.value||"").replace(/\D/g,"").slice(0,13);el.value=d?Number(d).toLocaleString("ru-RU"):"";}
 });
 document.addEventListener("change",function(e){
  if(e.target&&e.target.id==="set-file"){var f=e.target.files&&e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{doRestore(JSON.parse(r.result));}catch(err){toast("Файл не подходит");}};r.readAsText(f);}
