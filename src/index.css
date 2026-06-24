@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ===== Dark (primary) — deep blue fintech ===== */
+  :root,
+  .dark {
+    --bg: 222 47% 7%;
+    --surface: 221 40% 11%;
+    --card: 221 38% 14%;
+    --ink: 210 40% 98%;
+    --sub: 215 20% 70%;
+    --faint: 215 16% 52%;
+    --line: 215 25% 100%;        /* used with low alpha for glass borders */
+    --accent: 222 100% 59%;       /* ~#2D6CFF royal/electric blue */
+    --accent-ink: 0 0% 100%;
+    --pos: 152 62% 47%;
+    --neg: 0 79% 63%;
+  }
+
+  /* ===== Light ===== */
+  .light {
+    --bg: 220 33% 96%;
+    --surface: 0 0% 100%;
+    --card: 0 0% 100%;
+    --ink: 222 47% 11%;
+    --sub: 215 16% 38%;
+    --faint: 215 14% 52%;
+    --line: 222 30% 8%;
+    --accent: 222 100% 55%;
+    --accent-ink: 0 0% 100%;
+    --pos: 152 58% 38%;
+    --neg: 0 72% 51%;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: hsl(var(--bg));
+    color: hsl(var(--ink));
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  /* Glassmorphism card */
+  .glass {
+    background: hsl(var(--card) / 0.55);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid hsl(var(--line) / 0.09);
+    box-shadow: var(--tw-shadow, 0 8px 30px -12px hsl(220 60% 4% / 0.6));
+  }
+  .light .glass {
+    background: hsl(var(--card) / 0.85);
+    border-color: hsl(var(--line) / 0.08);
+  }
+  .pill {
+    @apply inline-flex items-center justify-center rounded-full text-sm font-semibold transition;
+  }
+}
+
+/* Fintech background: deep gradient + radial glow + faint star dots */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1100px 600px at 78% -8%, hsl(var(--accent) / 0.22), transparent 60%),
+    radial-gradient(900px 500px at 8% 8%, hsl(248 90% 60% / 0.14), transparent 55%),
+    linear-gradient(180deg, hsl(var(--bg)), hsl(var(--bg)));
+}
+.light .app-bg {
+  background:
+    radial-gradient(1000px 560px at 80% -10%, hsl(var(--accent) / 0.12), transparent 60%),
+    linear-gradient(180deg, hsl(var(--bg)), hsl(var(--bg)));
+}
+.app-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(hsl(0 0% 100% / 0.5) 0.6px, transparent 0.7px);
+  background-size: 26px 26px;
+  opacity: 0.04;
+}
+.light .app-bg::after { opacity: 0; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--line) / 0.15); border-radius: 8px; }
