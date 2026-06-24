@@ -16,9 +16,12 @@ export default defineConfig({
     chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          recharts: ['recharts'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            // recharts + d3 — тяжёлый и редко меняется: отдельным чанком для кэша
+            if (/[\\/]node_modules[\\/](recharts|d3-|victory-vendor|internmap)/.test(id)) return 'recharts'
+            return 'vendor'
+          }
         },
       },
     },
