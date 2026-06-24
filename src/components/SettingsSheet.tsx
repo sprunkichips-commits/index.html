@@ -101,13 +101,22 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
 
       <div className="my-5 h-px bg-line/10" />
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="soft" onClick={loadDemo}>
+        <Button
+          variant="soft"
+          onClick={() => {
+            loadDemo()
+            onOpenChange(false)
+          }}
+        >
           Заполнить примером
         </Button>
         <Button
           variant="danger"
           onClick={() => {
-            if (window.confirm('Удалить все операции и инвестиции?')) clearAll()
+            if (window.confirm('Удалить все операции и инвестиции?')) {
+              clearAll()
+              onOpenChange(false)
+            }
           }}
         >
           <Trash2 size={15} /> Очистить всё
