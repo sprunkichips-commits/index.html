@@ -9,4 +9,18 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  build: {
+    // Без инлайн-полифилла modulepreload — чтобы CSP script-src был строгим ('self'),
+    // без 'unsafe-inline'. Telegram WebView — современный Chromium/WebKit, polyfill не нужен.
+    modulePreload: { polyfill: false },
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          recharts: ['recharts'],
+        },
+      },
+    },
+  },
 })
