@@ -3,35 +3,35 @@
 @tailwind utilities;
 
 @layer base {
-  /* ===== Dark (primary) — deep blue fintech ===== */
+  /* ===== Dark (primary) — neutral near-black + lime accent ===== */
   :root,
   .dark {
-    --bg: 222 47% 7%;
-    --surface: 221 40% 11%;
-    --card: 221 38% 14%;
-    --ink: 210 40% 98%;
-    --sub: 215 20% 70%;
-    --faint: 215 16% 52%;
-    --line: 215 25% 100%;        /* used with low alpha for glass borders */
-    --accent: 222 100% 59%;       /* ~#2D6CFF royal/electric blue */
-    --accent-ink: 0 0% 100%;
-    --pos: 152 62% 47%;
-    --neg: 0 79% 63%;
+    --bg: 96 10% 6%;
+    --surface: 96 7% 10%;
+    --card: 100 7% 13%;
+    --ink: 90 10% 97%;
+    --sub: 95 8% 70%;
+    --faint: 95 6% 50%;
+    --line: 95 18% 100%;          /* used with low alpha for glass borders */
+    --accent: 75 92% 57%;         /* ~#C5F82A electric lime */
+    --accent-ink: 96 40% 7%;      /* near-black: текст/иконки на лаймовом фоне */
+    --pos: 150 62% 47%;
+    --neg: 4 79% 63%;
   }
 
   /* ===== Light ===== */
   .light {
-    --bg: 220 33% 96%;
+    --bg: 90 16% 96%;
     --surface: 0 0% 100%;
     --card: 0 0% 100%;
-    --ink: 222 47% 11%;
-    --sub: 215 16% 38%;
-    --faint: 215 14% 52%;
-    --line: 222 30% 8%;
-    --accent: 222 100% 55%;
-    --accent-ink: 0 0% 100%;
-    --pos: 152 58% 38%;
-    --neg: 0 72% 51%;
+    --ink: 96 22% 10%;
+    --sub: 95 9% 36%;
+    --faint: 95 7% 50%;
+    --line: 96 22% 10%;
+    --accent: 76 70% 45%;
+    --accent-ink: 96 45% 8%;     /* тёмный текст на лаймовых кнопках */
+    --pos: 150 58% 36%;
+    --neg: 2 72% 50%;
   }
 
   * {
@@ -77,13 +77,13 @@
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(1100px 600px at 78% -8%, hsl(var(--accent) / 0.22), transparent 60%),
-    radial-gradient(900px 500px at 8% 8%, hsl(248 90% 60% / 0.14), transparent 55%),
+    radial-gradient(900px 520px at 82% -12%, hsl(var(--accent) / 0.10), transparent 58%),
+    radial-gradient(700px 420px at 0% 100%, hsl(var(--accent) / 0.06), transparent 55%),
     linear-gradient(180deg, hsl(var(--bg)), hsl(var(--bg)));
 }
 .light .app-bg {
   background:
-    radial-gradient(1000px 560px at 80% -10%, hsl(var(--accent) / 0.12), transparent 60%),
+    radial-gradient(900px 520px at 82% -12%, hsl(var(--accent) / 0.10), transparent 60%),
     linear-gradient(180deg, hsl(var(--bg)), hsl(var(--bg)));
 }
 .app-bg::after {

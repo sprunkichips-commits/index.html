@@ -18,7 +18,7 @@ export function useChartColors(themeKey: string): ChartColors {
     const va = (n: string, a: number) => `hsl(${cs.getPropertyValue(n).trim()} / ${a})`
     return {
       accent: v('--accent'),
-      muted: va('--line', 0.16),
+      muted: va('--line', 0.22),
       pos: v('--pos'),
       neg: v('--neg'),
       sub: v('--sub'),

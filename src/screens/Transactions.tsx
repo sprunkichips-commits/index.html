@@ -41,7 +41,12 @@ export function Transactions({ openAdd }: { openAdd: (type: TxType) => void }) {
       <div className="grid grid-cols-3 gap-1.5">
         {FILTERS.map((f) => {
           const active = filter === f.value
-          const tone = f.value === 'Доход' ? 'bg-pos' : f.value === 'Расход' ? 'bg-neg' : 'bg-accent'
+          const tone =
+            f.value === 'Доход'
+              ? 'bg-pos text-white'
+              : f.value === 'Расход'
+                ? 'bg-neg text-white'
+                : 'bg-accent text-accent-ink'
           return (
             <button
               key={f.value}
@@ -49,7 +54,7 @@ export function Transactions({ openAdd }: { openAdd: (type: TxType) => void }) {
               className={cn(
                 'h-11 rounded-full text-[13px] font-semibold transition active:scale-[.97]',
                 active
-                  ? cn(tone, 'text-white shadow-fab')
+                  ? cn(tone, 'shadow-fab')
                   : 'glass border-line/10 text-sub [@media(hover:hover)]:hover:text-ink',
               )}
             >

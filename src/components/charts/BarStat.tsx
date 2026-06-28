@@ -44,15 +44,13 @@ export function BarStat({
             tickFormatter={(v) => fmtCompact(v as number)}
             allowDecimals={false}
           />
-          <Bar
-            dataKey="value"
-            radius={[6, 6, 6, 6]}
-            isAnimationActive={false}
-            onClick={(_, i) => onSelect(i)}
-            cursor="pointer"
-          >
+          <Bar dataKey="value" radius={[6, 6, 6, 6]} isAnimationActive={false} cursor="pointer">
             {data.map((_, i) => (
-              <Cell key={i} fill={i === selected && hasData ? c.accent : c.muted} />
+              <Cell
+                key={i}
+                fill={i === selected && hasData ? c.accent : c.muted}
+                onClick={() => onSelect(i)}
+              />
             ))}
           </Bar>
         </BarChart>

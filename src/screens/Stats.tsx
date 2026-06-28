@@ -27,10 +27,9 @@ export function Stats() {
     const ranges: [number, number][] = [
       [1, 7], [8, 14], [15, 21], [22, 28], [29, 31],
     ]
-    ranges.forEach(([a, b], i) => {
+    ranges.forEach(([a, b]) => {
       const slice = D.daily.filter((d) => d.day >= a && d.day <= b)
       if (slice.length) weeks.push({ label: `${a}–${Math.min(b, D.daily.length)}`, value: slice.reduce((s, d) => s + d.v, 0) })
-      else void i
     })
     return weeks
   }, [mode, D])

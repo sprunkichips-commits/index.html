@@ -61,7 +61,7 @@ function Shell() {
             </div>
           </header>
 
-          {tab === 'dash' && <Dashboard openAdd={openAdd} openSettings={openSettings} />}
+          {tab === 'dash' && <Dashboard openAdd={openAdd} />}
           {tab === 'tx' && <Transactions openAdd={openAdd} />}
           {tab === 'stats' && <Stats />}
           {tab === 'inv' && <Investments />}

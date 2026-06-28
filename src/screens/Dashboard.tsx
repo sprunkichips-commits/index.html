@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, Copy, Search, Wallet } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, Search, Wallet } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
 import { computeStats } from '@/lib/data'
 import { rub, rubS } from '@/lib/format'
@@ -8,13 +8,7 @@ import { TxRow } from '@/components/TxRow'
 import { cn } from '@/lib/utils'
 import type { TxType } from '@/lib/data'
 
-export function Dashboard({
-  openAdd,
-  openSettings,
-}: {
-  openAdd: (type: TxType) => void
-  openSettings: () => void
-}) {
+export function Dashboard({ openAdd }: { openAdd: (type: TxType) => void }) {
   const { data, cursor, firstName, setTab, delTx } = useStore()
   const D = useMemo(() => computeStats(data, cursor), [data, cursor])
   const recent = useMemo(
@@ -32,7 +26,6 @@ export function Dashboard({
     { label: 'Расход', icon: ArrowDownRight, cls: 'text-neg', onClick: () => openAdd('Расход') },
     { label: 'Доход', icon: ArrowUpRight, cls: 'text-pos', onClick: () => openAdd('Доход') },
     { label: 'Статистика', icon: BarChart3, cls: 'text-accent', onClick: () => setTab('stats') },
-    { label: 'Копия', icon: Copy, cls: 'text-sub', onClick: openSettings },
   ]
 
   return (
@@ -102,7 +95,7 @@ export function Dashboard({
       </Card>
 
       {/* Быстрые действия */}
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-3 gap-2.5">
         {actions.map((a) => {
           const Icon = a.icon
           return (

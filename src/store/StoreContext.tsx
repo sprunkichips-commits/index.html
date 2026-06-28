@@ -36,7 +36,7 @@ export type Theme = 'dark' | 'light'
 export type Tab = 'dash' | 'tx' | 'stats' | 'inv'
 export type Filter = 'Все' | 'Доход' | 'Расход'
 
-const THEME_BG: Record<Theme, string> = { dark: '#0B1020', light: '#F3F4F6' }
+const THEME_BG: Record<Theme, string> = { dark: '#0F110E', light: '#F4F5EF' }
 
 interface AddTxInput {
   type: TxType
@@ -72,7 +72,6 @@ interface Store {
   restore: (obj: unknown) => void
   loadDemo: () => void
   clearAll: () => void
-  exportJSON: (pretty?: boolean) => string
   download: () => void
   copy: () => void
   toast: (m: string) => void
@@ -213,11 +212,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast('Очищено')
   }, [persist, toast])
 
-  const exportJSON = useCallback(
-    (pretty?: boolean) => JSON.stringify(data, null, pretty ? 2 : undefined),
-    [data],
-  )
-
   const download = useCallback(() => {
     try {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -297,7 +291,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       restore,
       loadDemo,
       clearAll,
-      exportJSON,
       download,
       copy,
       toast,
@@ -305,7 +298,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [
       data, theme, cursor, tab, filter, notice, firstName,
       shiftMonth, toggleTheme, setTheme, addTx, delTx, addInv, delInv,
-      restore, loadDemo, clearAll, exportJSON, download, copy, toast,
+      restore, loadDemo, clearAll, download, copy, toast,
     ],
   )
 
