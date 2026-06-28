@@ -1,15 +1,14 @@
 name: Deploy to GitHub Pages
 
 # Собирает приложение и публикует dist на GitHub Pages.
-# ВАЖНО: деплой реально произойдёт, только когда в настройках репозитория
-# Settings → Pages → Source выбрано «GitHub Actions». Пока Source = «Deploy from a
-# branch (main)», main продолжает отдавать прежнюю версию, а этот workflow собирает
-# артефакт, но шаг deploy не перезапишет сайт. Переключить Source — финальный шаг,
-# когда ветка redesign готова (см. README, раздел «Деплой»).
+# Требует: Settings → Pages → Source = «GitHub Actions».
+# Деплой идёт с ветки main (она разрешена правилом окружения github-pages
+# по умолчанию). Чтобы публиковать с другой ветки — добавь её в
+# Settings → Environments → github-pages → Deployment branches.
 
 on:
   push:
-    branches: [redesign]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
