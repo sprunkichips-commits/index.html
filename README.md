@@ -86,18 +86,16 @@ data = {
 `vite.config.ts` задаёт `base: '/index.html/'` под URL проекта
 `https://sprunkichips-commits.github.io/index.html/`.
 
-Workflow `.github/workflows/deploy.yml` на пуш в `redesign` собирает и публикует
+Workflow `.github/workflows/deploy.yml` на пуш в `main` собирает и публикует
 `dist` через `actions/upload-pages-artifact` + `actions/deploy-pages`.
 
-**Пока `main` не ломаем.** GitHub Pages в репозитории один источник за раз. Сейчас
-Source = «Deploy from a branch (main)» — живёт прежняя версия. Когда `redesign`
-готов, чтобы переключиться:
+Требуется один раз: Settings → Pages → **Source: GitHub Actions**. После этого
+любой пуш в `main` пересобирает и публикует сайт. Ветка `main` разрешена правилом
+окружения `github-pages` по умолчанию; чтобы публиковать с другой ветки — добавь
+её в Settings → Environments → github-pages → Deployment branches.
 
-1. Settings → Pages → **Source: GitHub Actions**.
-2. Запустить workflow (повторный пуш в `redesign` или «Run workflow» вручную).
-3. Проверить сайт по адресу Pages и открыть его внутри Telegram через бота.
-
-Откат: вернуть Source на «Deploy from a branch (main)».
+Откат к прежней однофайловой версии: она в истории git (коммит `02e078e` и раньше),
+либо верни Source на «Deploy from a branch».
 
 ## Фаза 2 — TON Connect (опционально, ещё не подключено)
 

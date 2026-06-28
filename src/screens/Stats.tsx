@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, MousePointerClick } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
-import { computeStats, MONTHS, MS } from '@/lib/data'
+import { computeStats, MONTHS, MS, type TxType } from '@/lib/data'
 import { rub } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
@@ -10,34 +10,90 @@ import { GroupedMonths } from '@/components/charts/GroupedMonths'
 import { CategoryIcon } from '@/components/CategoryIcon'
 import { cn } from '@/lib/utils'
 
-type Mode = 'days' | 'weeks' | 'months'
+type Mode = 'days' | 'weeks' | 'months' | 'years'
+
+interface CatRow {
+  name: string
+  value: number
+  delta: number | null
+}
 
 export function Stats() {
   const { data, cursor } = useStore()
   const D = useMemo(() => computeStats(data, cursor), [data, cursor])
+  const [view, setView] = useState<TxType>('Расход')
   const [mode, setMode] = useState<Mode>('months')
   const [sel, setSel] = useState(0)
 
-  // данные графика по режиму
+  // Один проход по операциям выбранного типа: ряды для всех режимов + категории.
+  const agg = useMemo(() => {
+    const y = cursor.y
+    const m = cursor.m
+    const nd = new Date(y, m + 1, 0).getDate()
+    const prev = new Date(y, m - 1, 1)
+    const py = prev.getFullYear()
+    const pm = prev.getMonth()
+
+    const months = new Array(12).fill(0)
+    const days = new Array(nd).fill(0)
+    const byYear: Record<number, number> = {}
+    const catNow: Record<string, number> = {}
+    const catPrev: Record<string, number> = {}
+
+    data.transactions.forEach((t) => {
+      if (t.type !== view) return
+      const d = new Date(t.date + 'T00:00:00')
+      const ty = d.getFullYear()
+      const tm = d.getMonth()
+      const td = d.getDate()
+      byYear[ty] = (byYear[ty] || 0) + t.amount
+      if (ty === y) months[tm] += t.amount
+      if (ty === y && tm === m) {
+        days[td - 1] += t.amount
+        catNow[t.category] = (catNow[t.category] || 0) + t.amount
+      }
+      if (ty === py && tm === pm) catPrev[t.category] = (catPrev[t.category] || 0) + t.amount
+    })
+
+    const years = Object.keys(byYear)
+      .map(Number)
+      .sort((a, b) => a - b)
+
+    const total = Object.values(catNow).reduce((s, v) => s + v, 0)
+    const cats: CatRow[] = Object.keys(catNow)
+      .map((name) => {
+        const p = catPrev[name] || 0
+        return { name, value: catNow[name], delta: p > 0 ? ((catNow[name] - p) / p) * 100 : null }
+      })
+      .sort((a, b) => b.value - a.value)
+
+    return { months, days, years, byYear, cats, total, nd }
+  }, [data.transactions, cursor.y, cursor.m, view])
+
+  // Данные графика по режиму
   const bars: BarPoint[] = useMemo(() => {
-    if (mode === 'months') return D.monthly.map((m) => ({ label: m.label, value: m.ex }))
-    if (mode === 'days') return D.daily.map((d) => ({ label: String(d.day), value: d.v }))
+    if (mode === 'months') return MS.map((label, i) => ({ label, value: agg.months[i] }))
+    if (mode === 'days') return agg.days.map((v, i) => ({ label: String(i + 1), value: v }))
+    if (mode === 'years') return agg.years.map((yy) => ({ label: String(yy), value: agg.byYear[yy] }))
     // weeks
     const weeks: BarPoint[] = []
     const ranges: [number, number][] = [
       [1, 7], [8, 14], [15, 21], [22, 28], [29, 31],
     ]
     ranges.forEach(([a, b]) => {
-      const slice = D.daily.filter((d) => d.day >= a && d.day <= b)
-      if (slice.length) weeks.push({ label: `${a}–${Math.min(b, D.daily.length)}`, value: slice.reduce((s, d) => s + d.v, 0) })
+      const slice = agg.days.slice(a - 1, b)
+      if (slice.length) weeks.push({ label: `${a}–${Math.min(b, agg.nd)}`, value: slice.reduce((s, v) => s + v, 0) })
     })
     return weeks
-  }, [mode, D])
+  }, [mode, agg])
 
-  // выбранный по умолчанию: для месяцев — текущий месяц курсора, иначе — макс. столбец
+  // Выбранный по умолчанию
   useEffect(() => {
     if (mode === 'months') {
       setSel(cursor.m)
+    } else if (mode === 'years') {
+      const i = agg.years.indexOf(cursor.y)
+      setSel(i >= 0 ? i : Math.max(0, agg.years.length - 1))
     } else {
       let mi = 0
       bars.forEach((b, i) => {
@@ -46,40 +102,42 @@ export function Stats() {
       setSel(mi)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, cursor.m, cursor.y, data.transactions.length])
+  }, [mode, view, cursor.m, cursor.y, data.transactions.length])
 
+  const word = view === 'Доход' ? 'Доход' : 'Расход'
   const selBar = bars[sel]
   const selLabel =
     mode === 'months'
-      ? `Расход · ${MONTHS[sel] ?? ''} ${cursor.y}`
+      ? `${word} · ${MONTHS[sel] ?? ''} ${cursor.y}`
       : mode === 'days'
-        ? `Расход · ${selBar?.label ?? ''} ${MS[cursor.m]}`
-        : `Расход · дни ${selBar?.label ?? ''}`
+        ? `${word} · ${selBar?.label ?? ''} ${MS[cursor.m]}`
+        : mode === 'years'
+          ? `${word} · ${selBar?.label ?? ''} год`
+          : `${word} · дни ${selBar?.label ?? ''}`
 
-  // изменение по категориям месяц-к-месяцу
-  const prevCat = useMemo(() => {
-    const prev = new Date(cursor.y, cursor.m - 1, 1)
-    const py = prev.getFullYear()
-    const pm = prev.getMonth()
-    const acc: Record<string, number> = {}
-    data.transactions.forEach((t) => {
-      if (t.type !== 'Расход') return
-      const d = new Date(t.date + 'T00:00:00')
-      if (d.getFullYear() === py && d.getMonth() === pm) acc[t.category] = (acc[t.category] || 0) + t.amount
-    })
-    return acc
-  }, [data.transactions, cursor.y, cursor.m])
+  const catTitle = view === 'Доход' ? 'Источники дохода' : 'Куда уходят деньги'
+  const shareWord = view === 'Доход' ? 'доходов' : 'расходов'
 
   return (
     <div className="flex flex-col gap-5">
       <Card className="p-5">
         <Segmented
+          value={view}
+          onChange={(v) => setView(v)}
+          options={[
+            { value: 'Доход' as TxType, label: 'Доходы' },
+            { value: 'Расход' as TxType, label: 'Расходы' },
+          ]}
+          className="mb-3"
+        />
+        <Segmented
           value={mode}
           onChange={(m) => setMode(m)}
           options={[
-            { value: 'days', label: 'Дни' },
-            { value: 'weeks', label: 'Недели' },
-            { value: 'months', label: 'Месяцы' },
+            { value: 'days' as Mode, label: 'Дни' },
+            { value: 'weeks' as Mode, label: 'Недели' },
+            { value: 'months' as Mode, label: 'Месяцы' },
+            { value: 'years' as Mode, label: 'Годы' },
           ]}
           className="mb-4"
         />
@@ -110,34 +168,43 @@ export function Stats() {
       </Card>
 
       <Card className="p-4">
-        <div className="mb-2 text-sm font-semibold">Куда уходят деньги</div>
-        {D.byCat.length === 0 ? (
-          <div className="py-8 text-center text-[13px] text-faint">В этом месяце трат нет</div>
+        <div className="mb-2 text-sm font-semibold">{catTitle}</div>
+        {agg.cats.length === 0 ? (
+          <div className="py-8 text-center text-[13px] text-faint">
+            {view === 'Доход' ? 'В этом месяце доходов нет' : 'В этом месяце трат нет'}
+          </div>
         ) : (
           <div className="flex flex-col">
-            {D.byCat.map((c, i) => {
-              const prev = prevCat[c.name] || 0
-              const delta = prev > 0 ? ((c.value - prev) / prev) * 100 : null
-              const up = delta != null && delta > 0 // расход вырос — это «хуже» (красный)
-              const share = D.expense > 0 ? (c.value / D.expense) * 100 : 0
+            {agg.cats.map((c, i) => {
+              const arrowUp = c.delta != null && c.delta > 0
+              const good = c.delta != null && (view === 'Доход' ? c.delta > 0 : c.delta < 0)
+              const share = agg.total > 0 ? (c.value / agg.total) * 100 : 0
               return (
                 <div key={c.name} className={cn('flex items-center gap-3 py-2.5', i && 'border-t border-line/8')}>
-                  <CategoryIcon category={c.name} />
+                  {view === 'Доход' ? (
+                    <span className="grid h-10 w-10 flex-none place-items-center rounded-2xl bg-pos/15 text-pos">
+                      <ArrowUpRight size={18} />
+                    </span>
+                  ) : (
+                    <CategoryIcon category={c.name} />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{c.name}</div>
-                    <div className="text-xs text-faint">{Math.round(share)}% от расходов</div>
+                    <div className="text-xs text-faint">
+                      {Math.round(share)}% от {shareWord}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="mono text-sm font-semibold">{rub(c.value)}</div>
-                    {delta != null ? (
+                    {c.delta != null ? (
                       <div
                         className={cn(
                           'mono flex items-center justify-end gap-0.5 text-xs font-semibold',
-                          up ? 'text-neg' : 'text-pos',
+                          good ? 'text-pos' : 'text-neg',
                         )}
                       >
-                        {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                        {Math.abs(Math.round(delta))}%
+                        {arrowUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                        {Math.abs(Math.round(c.delta))}%
                       </div>
                     ) : (
                       <div className="text-xs text-faint">новое</div>
