@@ -10,6 +10,7 @@ export interface Tx {
   category: string
   amount: number
   note: string
+  createdAt?: number // epoch ms — когда операция была добавлена (опц., для старых записей нет)
 }
 
 export interface Inv {
@@ -132,6 +133,9 @@ export const CAT_MAX = 40
 export const AMT_MAX = 1e12
 const MAX_TX = 5000
 const MAX_INV = 500
+// Разумный диапазон epoch-ms (2010…2100) — для валидации времени добавления.
+const MS_2010 = 1262304000000
+const MS_2100 = 4102444800000
 
 export function clampStr(s: unknown, max: number): string {
   return String(s == null ? '' : s).slice(0, max)
@@ -146,6 +150,23 @@ function safeId(id: unknown): string {
 }
 export function validDate(d: unknown): string | null {
   return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null
+}
+
+/**
+ * Время добавления операции (epoch ms) или null. Берём из createdAt; для старых
+ * записей пытаемся достать из id — uid() начинается с Date.now().toString(36)
+ * (+5 случайных символов). Если не получилось/вне диапазона — null.
+ */
+export function addedAt(tx: Tx): number | null {
+  if (typeof tx.createdAt === 'number' && tx.createdAt > MS_2010 && tx.createdAt < MS_2100) {
+    return tx.createdAt
+  }
+  const id = tx.id
+  if (typeof id === 'string' && id.length >= 8) {
+    const ms = parseInt(id.slice(0, id.length - 5), 36)
+    if (isFinite(ms) && ms > MS_2010 && ms < MS_2100) return ms
+  }
+  return null
 }
 
 /**
@@ -165,6 +186,10 @@ export function sanitize(o: unknown): AppData | null {
       const t = raw as Record<string, unknown>
       const dt = validDate(t.date)
       if (!dt || t.amount == null) return null
+      const ca =
+        typeof t.createdAt === 'number' && t.createdAt > MS_2010 && t.createdAt < MS_2100
+          ? t.createdAt
+          : undefined
       return {
         id: safeId(t.id),
         date: dt,
@@ -172,6 +197,7 @@ export function sanitize(o: unknown): AppData | null {
         category: clampStr(t.category || 'Прочие расходы', CAT_MAX),
         amount: clampAmt(t.amount),
         note: clampStr(t.note || '', NOTE_MAX),
+        ...(ca ? { createdAt: ca } : {}),
       }
     })
     .filter((x): x is Tx => x !== null)

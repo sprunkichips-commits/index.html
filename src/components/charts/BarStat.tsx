@@ -23,6 +23,9 @@ export function BarStat({
   const { theme } = useStore()
   const c = useChartColors(theme)
   const hasData = data.some((d) => d.value > 0)
+  // Мало столбцов (месяцы=12, недели, годы) — показываем все подписи ровно под
+  // столбцами. Много (дни=28–31) — прореживаем, иначе наедут друг на друга.
+  const many = data.length > 16
 
   return (
     <div style={{ height }} className="w-full">
@@ -32,9 +35,9 @@ export function BarStat({
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: c.faint, fontSize: 10 }}
-            interval="preserveStartEnd"
-            minTickGap={6}
+            tick={{ fill: c.faint, fontSize: many ? 10 : 9.5 }}
+            interval={many ? 'preserveStartEnd' : 0}
+            minTickGap={many ? 6 : 0}
           />
           <YAxis
             tickLine={false}

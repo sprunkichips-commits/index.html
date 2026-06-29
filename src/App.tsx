@@ -9,12 +9,13 @@ import { Toast } from './components/Toast'
 import { AddSheet } from './components/AddSheet'
 import { SettingsSheet } from './components/SettingsSheet'
 import { ProfileSheet } from './components/ProfileSheet'
+import { TxDetailSheet } from './components/TxDetailSheet'
 import { Button } from './components/ui/button'
 import { Dashboard } from './screens/Dashboard'
 import { Transactions } from './screens/Transactions'
 import { Stats } from './screens/Stats'
 import { Investments } from './screens/Investments'
-import type { TxType } from './lib/data'
+import type { Tx, TxType } from './lib/data'
 
 // Мягкий клиентский UX-замок (не авторизация) — см. lib/telegram.ts
 const blocked = !!(OWNER_ID && tgUser && tgUser.id !== OWNER_ID)
@@ -34,6 +35,7 @@ function Shell() {
   const [addType, setAddType] = useState<TxType>('Расход')
   const [setOpen, setSetOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [detailTx, setDetailTx] = useState<Tx | null>(null)
 
   const openAdd = (type: TxType) => {
     setAddType(type)
@@ -41,6 +43,7 @@ function Shell() {
   }
   const openSettings = () => setSetOpen(true)
   const openProfile = () => setProfileOpen(true)
+  const openDetail = (tx: Tx) => setDetailTx(tx)
 
   return (
     <>
@@ -64,8 +67,8 @@ function Shell() {
             </div>
           </header>
 
-          {tab === 'dash' && <Dashboard openAdd={openAdd} openProfile={openProfile} />}
-          {tab === 'tx' && <Transactions openAdd={openAdd} />}
+          {tab === 'dash' && <Dashboard openAdd={openAdd} openProfile={openProfile} openDetail={openDetail} />}
+          {tab === 'tx' && <Transactions openAdd={openAdd} openDetail={openDetail} />}
           {tab === 'stats' && <Stats />}
           {tab === 'inv' && <Investments />}
         </main>
@@ -75,6 +78,7 @@ function Shell() {
       <AddSheet open={addOpen} onOpenChange={setAddOpen} initialType={addType} />
       <SettingsSheet open={setOpen} onOpenChange={setSetOpen} />
       <ProfileSheet open={profileOpen} onOpenChange={setProfileOpen} />
+      <TxDetailSheet tx={detailTx} onClose={() => setDetailTx(null)} />
       <Toast />
     </>
   )

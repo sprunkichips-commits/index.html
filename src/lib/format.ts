@@ -32,6 +32,27 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+const DT_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+const DT_DATETIME = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+/** Дата операции по строке YYYY-MM-DD: «29 июня 2026 г.» */
+export function fmtDateLong(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return isNaN(d.getTime()) ? dateStr : DT_DATE.format(d)
+}
+
+/** Дата и время по epoch-ms: «29 июня 2026 г. в 14:32» */
+export function fmtDateTime(ms: number): string {
+  const d = new Date(ms)
+  return isNaN(d.getTime()) ? '—' : DT_DATETIME.format(d)
+}
+
 /** Группировка вводимой суммы по разрядам (для полей ввода) */
 export function grp(s: string): string {
   const d = (s || '').replace(/\D/g, '')

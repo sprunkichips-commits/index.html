@@ -13,7 +13,13 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'Расход', label: 'Расходы' },
 ]
 
-export function Transactions({ openAdd }: { openAdd: (type: TxType) => void }) {
+export function Transactions({
+  openAdd,
+  openDetail,
+}: {
+  openAdd: (type: TxType) => void
+  openDetail: (tx: Tx) => void
+}) {
   const { data, filter, setFilter, delTx } = useStore()
 
   const groups = useMemo(() => {
@@ -90,7 +96,7 @@ export function Transactions({ openAdd }: { openAdd: (type: TxType) => void }) {
                 </div>
                 {g.items.map((t, i) => (
                   <div key={t.id} className={i ? 'border-t border-line/8' : ''}>
-                    <TxRow tx={t} onDelete={delTx} />
+                    <TxRow tx={t} onDelete={delTx} onOpen={openDetail} />
                   </div>
                 ))}
               </div>

@@ -164,6 +164,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         category,
         amount,
         note,
+        createdAt: Date.now(),
       }
       const next: AppData = { ...data, transactions: [tx, ...data.transactions] }
       const d = new Date(input.date + 'T00:00:00')

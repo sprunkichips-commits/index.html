@@ -6,14 +6,16 @@ import { rub, rubS } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { TxRow } from '@/components/TxRow'
 import { cn } from '@/lib/utils'
-import type { TxType } from '@/lib/data'
+import type { Tx, TxType } from '@/lib/data'
 
 export function Dashboard({
   openAdd,
   openProfile,
+  openDetail,
 }: {
   openAdd: (type: TxType) => void
   openProfile: () => void
+  openDetail: (tx: Tx) => void
 }) {
   const { data, cursor, profile, displayName, setTab, delTx } = useStore()
   const D = useMemo(() => computeStats(data, cursor), [data, cursor])
@@ -142,7 +144,7 @@ export function Dashboard({
         ) : (
           recent.map((t, i) => (
             <div key={t.id} className={i ? 'border-t border-line/8' : ''}>
-              <TxRow tx={t} onDelete={delTx} />
+              <TxRow tx={t} onDelete={delTx} onOpen={openDetail} />
             </div>
           ))
         )}
