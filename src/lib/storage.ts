@@ -5,7 +5,9 @@ import { TG } from './telegram'
 
 export const KEY = 'pm-finance-v1' // localStorage: данные
 export const TKEY = 'pm-finance-theme-v1' // localStorage: тема
-// CloudStorage: данные в чанках под именем "data" (data_0…/data_n), тема в "theme".
+export const PKEY = 'pm-finance-profile-v1' // localStorage: профиль (ник + аватар)
+// CloudStorage: данные в чанках под именем "data" (data_0…/data_n), тема в "theme",
+// профиль в чанках под именем "profile" (аватар не влезает в один ключ 4096).
 
 const CHUNK = 3500
 const prevN: Record<string, number> = {}

@@ -27,7 +27,7 @@ export function BarStat({
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 14, right: 4, left: -16, bottom: 0 }} barCategoryGap="22%">
+        <BarChart data={data} margin={{ top: 14, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
           <XAxis
             dataKey="label"
             tickLine={false}
@@ -39,7 +39,8 @@ export function BarStat({
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={42}
+            width={48}
+            tickMargin={6}
             tick={{ fill: c.faint, fontSize: 10 }}
             tickFormatter={(v) => fmtCompact(v as number)}
             allowDecimals={false}

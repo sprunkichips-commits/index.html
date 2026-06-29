@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, Search, Wallet } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, Pencil, Search, Wallet } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
 import { computeStats } from '@/lib/data'
 import { rub, rubS } from '@/lib/format'
@@ -8,8 +8,14 @@ import { TxRow } from '@/components/TxRow'
 import { cn } from '@/lib/utils'
 import type { TxType } from '@/lib/data'
 
-export function Dashboard({ openAdd }: { openAdd: (type: TxType) => void }) {
-  const { data, cursor, firstName, setTab, delTx } = useStore()
+export function Dashboard({
+  openAdd,
+  openProfile,
+}: {
+  openAdd: (type: TxType) => void
+  openProfile: () => void
+}) {
+  const { data, cursor, profile, displayName, setTab, delTx } = useStore()
   const D = useMemo(() => computeStats(data, cursor), [data, cursor])
   const recent = useMemo(
     () =>
@@ -20,7 +26,7 @@ export function Dashboard({ openAdd }: { openAdd: (type: TxType) => void }) {
     [data.transactions],
   )
   const ioT = D.income + D.expense || 1
-  const initial = (firstName || 'Я').slice(0, 1).toUpperCase()
+  const initial = (displayName || 'Я').trim().slice(0, 1).toUpperCase()
 
   const actions = [
     { label: 'Расход', icon: ArrowDownRight, cls: 'text-neg', onClick: () => openAdd('Расход') },
@@ -30,19 +36,31 @@ export function Dashboard({ openAdd }: { openAdd: (type: TxType) => void }) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Приветствие */}
+      {/* Профиль — нажми, чтобы изменить ник и аватар */}
       <div className="flex items-center gap-3">
-        <div className="grid h-11 w-11 flex-none place-items-center rounded-full bg-accent/20 text-base font-bold text-accent">
-          {initial}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-xs text-faint">Привет,</div>
-          <div className="truncate text-base font-bold">{firstName || 'друг'} 👋</div>
-        </div>
-        <button className="grid h-10 w-10 place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Поиск">
+        <button
+          onClick={openProfile}
+          aria-label="Изменить профиль"
+          className="group flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className="grid h-11 w-11 flex-none place-items-center overflow-hidden rounded-full bg-accent/20 text-base font-bold text-accent">
+            {profile.avatar ? (
+              <img src={profile.avatar} alt="" className="h-full w-full object-cover" />
+            ) : (
+              initial
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-base font-bold">{displayName}</span>
+            <span className="flex items-center gap-1 text-xs text-faint transition group-hover:text-sub">
+              <Pencil size={11} /> изменить профиль
+            </span>
+          </span>
+        </button>
+        <button className="grid h-10 w-10 flex-none place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Поиск">
           <Search size={18} />
         </button>
-        <button className="grid h-10 w-10 place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Уведомления">
+        <button className="grid h-10 w-10 flex-none place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Уведомления">
           <Bell size={18} />
         </button>
       </div>

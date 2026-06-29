@@ -12,12 +12,14 @@ import {
   type AppData,
   type Cursor,
   type Inv,
+  type Profile,
   type Tx,
   type TxType,
   clampStr,
   clampAmt,
   cursorFromData,
   emptyData,
+  parseProfile,
   parseStored,
   sanitize,
   uid,
@@ -28,7 +30,7 @@ import {
   TYPE_MAX,
   DEMO,
 } from '@/lib/data'
-import { KEY, TKEY, bigGet, bigSet, cloudGet, cloudSet, sget, sset } from '@/lib/storage'
+import { KEY, PKEY, TKEY, bigGet, bigSet, cloudGet, cloudSet, sget, sset } from '@/lib/storage'
 import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 import { today } from '@/lib/format'
 
@@ -60,11 +62,14 @@ interface Store {
   filter: Filter
   notice: string | null
   firstName: string
+  profile: Profile
+  displayName: string
   setTab: (t: Tab) => void
   setFilter: (f: Filter) => void
   shiftMonth: (delta: number) => void
   toggleTheme: () => void
   setTheme: (t: Theme) => void
+  setProfile: (p: Profile) => void
   addTx: (input: AddTxInput) => boolean
   delTx: (id: string) => void
   addInv: (input: AddInvInput) => boolean
@@ -99,9 +104,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [tab, setTab] = useState<Tab>('dash')
   const [filter, setFilter] = useState<Filter>('Все')
   const [notice, setNotice] = useState<string | null>(null)
+  const [profile, setProfileState] = useState<Profile>(() => parseProfile(sget(PKEY)))
   const toastTimer = useRef<number | null>(null)
 
   const firstName = tgUser?.first_name?.trim() || ''
+  const displayName = profile.name || firstName || 'Гость'
 
   // Persist helper — localStorage зеркало + CloudStorage (как в исходнике).
   const persist = useCallback((next: AppData) => {
@@ -121,6 +128,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const toggleTheme = useCallback(() => {
     setTheme(theme === 'dark' ? 'light' : 'dark')
   }, [theme, setTheme])
+
+  // Профиль (ник + аватар): нормализуем, зеркалим в localStorage и в облако.
+  const setProfile = useCallback((p: Profile) => {
+    const next: Profile = { name: clampStr(p.name, NAME_MAX).trim(), avatar: p.avatar || '' }
+    setProfileState(next)
+    const str = JSON.stringify(next)
+    sset(PKEY, str)
+    if (hasCloud) bigSet('profile', str)
+  }, [])
 
   const toast = useCallback((m: string) => {
     setNotice(m)
@@ -249,7 +265,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applyTheme(theme)
     tgReady()
     if (!hasCloud) return
-    Promise.all([bigGet('data'), cloudGet('theme')]).then(([dataStr, th]) => {
+    Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile')]).then(([dataStr, th, profStr]) => {
       if ((th === 'light' || th === 'dark') && th !== theme) {
         setThemeState(th)
         applyTheme(th)
@@ -266,6 +282,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         bigSet('data', JSON.stringify(data))
         cloudSet('theme', theme)
       }
+      if (profStr) {
+        const p = parseProfile(profStr)
+        setProfileState(p)
+        sset(PKEY, JSON.stringify(p))
+      } else if (profile.name || profile.avatar) {
+        // нет облачного профиля, но есть локальный — поднимаем в облако
+        bigSet('profile', JSON.stringify(profile))
+      }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -279,11 +303,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       filter,
       notice,
       firstName,
+      profile,
+      displayName,
       setTab,
       setFilter,
       shiftMonth,
       toggleTheme,
       setTheme,
+      setProfile,
       addTx,
       delTx,
       addInv,
@@ -296,8 +323,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast,
     }),
     [
-      data, theme, cursor, tab, filter, notice, firstName,
-      shiftMonth, toggleTheme, setTheme, addTx, delTx, addInv, delInv,
+      data, theme, cursor, tab, filter, notice, firstName, profile, displayName,
+      shiftMonth, toggleTheme, setTheme, setProfile, addTx, delTx, addInv, delInv,
       restore, loadDemo, clearAll, download, copy, toast,
     ],
   )

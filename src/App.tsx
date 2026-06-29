@@ -8,6 +8,7 @@ import { MonthSelector } from './components/MonthSelector'
 import { Toast } from './components/Toast'
 import { AddSheet } from './components/AddSheet'
 import { SettingsSheet } from './components/SettingsSheet'
+import { ProfileSheet } from './components/ProfileSheet'
 import { Button } from './components/ui/button'
 import { Dashboard } from './screens/Dashboard'
 import { Transactions } from './screens/Transactions'
@@ -32,12 +33,14 @@ function Shell() {
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<TxType>('Расход')
   const [setOpen, setSetOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   const openAdd = (type: TxType) => {
     setAddType(type)
     setAddOpen(true)
   }
   const openSettings = () => setSetOpen(true)
+  const openProfile = () => setProfileOpen(true)
 
   return (
     <>
@@ -61,7 +64,7 @@ function Shell() {
             </div>
           </header>
 
-          {tab === 'dash' && <Dashboard openAdd={openAdd} />}
+          {tab === 'dash' && <Dashboard openAdd={openAdd} openProfile={openProfile} />}
           {tab === 'tx' && <Transactions openAdd={openAdd} />}
           {tab === 'stats' && <Stats />}
           {tab === 'inv' && <Investments />}
@@ -71,6 +74,7 @@ function Shell() {
       <BottomNav onAdd={() => openAdd('Расход')} />
       <AddSheet open={addOpen} onOpenChange={setAddOpen} initialType={addType} />
       <SettingsSheet open={setOpen} onOpenChange={setSetOpen} />
+      <ProfileSheet open={profileOpen} onOpenChange={setProfileOpen} />
       <Toast />
     </>
   )

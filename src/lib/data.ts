@@ -30,6 +30,12 @@ export interface Cursor {
   m: number
 }
 
+/** Профиль пользователя: отображаемый ник и аватар (data-URL картинки). */
+export interface Profile {
+  name: string
+  avatar: string
+}
+
 // Названия категорий — ДОСЛОВНО как в исходнике (иначе старые операции не сопоставятся).
 export const INCOME: string[] = ['YouTube', 'Реклама', 'Офлайн-работа', 'Близкие', 'Прочий доход']
 
@@ -88,6 +94,34 @@ export function uid(): string {
 
 export function emptyData(): AppData {
   return { transactions: [], investments: [] }
+}
+
+// Потолок размера аватара (длина data-URL). После уменьшения до ~240px аватар
+// обычно < 30 000 символов; лимит защищает CloudStorage и хранилище от мусора.
+export const AVATAR_MAX = 600_000
+
+export function emptyProfile(): Profile {
+  return { name: '', avatar: '' }
+}
+
+/**
+ * Разбор/нормализация профиля из строки. Аватар принимаем только как data-URL
+ * картинки и в пределах лимита — иначе отбрасываем (защита от js:/внешних ссылок
+ * и переполнения). Ник — по длине NAME_MAX.
+ */
+export function parseProfile(raw: string | null): Profile {
+  if (!raw) return emptyProfile()
+  try {
+    const p = JSON.parse(raw)
+    if (!p || typeof p !== 'object') return emptyProfile()
+    const o = p as Record<string, unknown>
+    const name = clampStr(o.name, NAME_MAX)
+    const av = typeof o.avatar === 'string' ? o.avatar : ''
+    const avatar = /^data:image\//.test(av) && av.length <= AVATAR_MAX ? av : ''
+    return { name, avatar }
+  } catch {
+    return emptyProfile()
+  }
 }
 
 // ----- Лимиты ввода/импорта: защита от мусора и переполнения чанков CloudStorage -----

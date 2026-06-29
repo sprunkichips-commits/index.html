@@ -51,6 +51,29 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }
+
+  /* iOS/WebKit: нативный input[type=date] по умолчанию не тянется на всю ширину
+     и центрирует значение с внутренним отступом — рамка «уезжала» вправо и не
+     совпадала с остальными полями. Нормализуем под обычный текстовый инпут. */
+  input[type='date'] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    text-align: left;
+  }
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+    padding: 0;
+  }
+  input[type='date']::-webkit-calendar-picker-indicator {
+    margin: 0;
+    opacity: 0.55;
+  }
+  .dark input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.5;
+  }
 }
 
 @layer components {
