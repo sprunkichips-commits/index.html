@@ -106,9 +106,19 @@ export function emptyProfile(): Profile {
 }
 
 /**
- * Разбор/нормализация профиля из строки. Аватар принимаем только как data-URL
- * картинки и в пределах лимита — иначе отбрасываем (защита от js:/внешних ссылок
- * и переполнения). Ник — по длине NAME_MAX.
+ * Принимаем аватар ТОЛЬКО как data-URL картинки и в пределах лимита; всё прочее
+ * (внешние ссылки http(s):, javascript:, мусор, переразмер) — отбрасываем в ''.
+ * Применяется и на чтении, и на записи (защита в глубину).
+ */
+export function cleanAvatar(av: unknown): string {
+  return typeof av === 'string' && /^data:image\/(png|jpeg|jpg|webp|gif);base64,/.test(av) && av.length <= AVATAR_MAX
+    ? av
+    : ''
+}
+
+/**
+ * Разбор/нормализация профиля из строки. Ник — по длине NAME_MAX, аватар — через
+ * cleanAvatar. Возвращает пустой профиль при любой ошибке/некорректных данных.
  */
 export function parseProfile(raw: string | null): Profile {
   if (!raw) return emptyProfile()
@@ -116,10 +126,7 @@ export function parseProfile(raw: string | null): Profile {
     const p = JSON.parse(raw)
     if (!p || typeof p !== 'object') return emptyProfile()
     const o = p as Record<string, unknown>
-    const name = clampStr(o.name, NAME_MAX)
-    const av = typeof o.avatar === 'string' ? o.avatar : ''
-    const avatar = /^data:image\//.test(av) && av.length <= AVATAR_MAX ? av : ''
-    return { name, avatar }
+    return { name: clampStr(o.name, NAME_MAX), avatar: cleanAvatar(o.avatar) }
   } catch {
     return emptyProfile()
   }

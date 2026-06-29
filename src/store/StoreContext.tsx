@@ -17,6 +17,7 @@ import {
   type TxType,
   clampStr,
   clampAmt,
+  cleanAvatar,
   cursorFromData,
   emptyData,
   parseProfile,
@@ -131,7 +132,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Профиль (ник + аватар): нормализуем, зеркалим в localStorage и в облако.
   const setProfile = useCallback((p: Profile) => {
-    const next: Profile = { name: clampStr(p.name, NAME_MAX).trim(), avatar: p.avatar || '' }
+    const next: Profile = { name: clampStr(p.name, NAME_MAX).trim(), avatar: cleanAvatar(p.avatar) }
     setProfileState(next)
     const str = JSON.stringify(next)
     sset(PKEY, str)

@@ -24,8 +24,10 @@ export function BarStat({
   const c = useChartColors(theme)
   const hasData = data.some((d) => d.value > 0)
   // Мало столбцов (месяцы=12, недели, годы) — показываем все подписи ровно под
-  // столбцами. Много (дни=28–31) — прореживаем, иначе наедут друг на друга.
+  // столбцами. Много (дни=28–31) — берём ровные подписи по кратным 5 (5,10,…,30),
+  // иначе авто-прореживание Recharts даёт неравные промежутки и подписи «съезжают».
   const many = data.length > 16
+  const dayTicks = many ? data.map((d) => d.label).filter((l) => Number(l) % 5 === 0) : undefined
 
   return (
     <div style={{ height }} className="w-full">
@@ -36,8 +38,9 @@ export function BarStat({
             tickLine={false}
             axisLine={false}
             tick={{ fill: c.faint, fontSize: many ? 10 : 9.5 }}
-            interval={many ? 'preserveStartEnd' : 0}
-            minTickGap={many ? 6 : 0}
+            interval={0}
+            ticks={dayTicks}
+            minTickGap={0}
           />
           <YAxis
             tickLine={false}
