@@ -40,6 +40,14 @@
   html, body, #root {
     height: 100%;
   }
+  html {
+    /* Запрет double-tap-zoom (и снятие 300мс задержки) + фикс авто-увеличения
+       шрифта при повороте. Pinch-zoom глушится в main.tsx — viewport
+       user-scalable=no часть версий iOS Safari/Telegram WebView игнорирует. */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     margin: 0;
     background: hsl(var(--bg));
