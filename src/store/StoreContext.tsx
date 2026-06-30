@@ -36,7 +36,7 @@ import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 import { today } from '@/lib/format'
 
 export type Theme = 'dark' | 'light'
-export type Tab = 'dash' | 'tx' | 'stats' | 'inv'
+export type Tab = 'dash' | 'tx' | 'stats' | 'inv' | 'goals'
 export type Filter = 'Все' | 'Доход' | 'Расход'
 
 const THEME_BG: Record<Theme, string> = { dark: '#0F110E', light: '#F4F5EF' }

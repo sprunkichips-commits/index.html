@@ -17,12 +17,12 @@ export function BottomNav({ onAdd }: { onAdd: () => void }) {
         key={n.tab}
         onClick={() => setTab(n.tab)}
         className={cn(
-          'flex h-full min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition active:scale-95',
+          'flex h-full min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 transition active:scale-95',
           active ? 'text-accent' : 'text-faint',
         )}
       >
-        <Icon size={21} />
-        <span className="text-[10px] font-medium">{n.label}</span>
+        <Icon size={20} className="flex-none" />
+        <span className="max-w-full truncate text-[9px] font-medium leading-none">{n.label}</span>
       </button>
     )
   }

@@ -6,6 +6,7 @@ import { TG } from './telegram'
 export const KEY = 'pm-finance-v1' // localStorage: данные
 export const TKEY = 'pm-finance-theme-v1' // localStorage: тема
 export const PKEY = 'pm-finance-profile-v1' // localStorage: профиль (ник + аватар)
+export const GKEY = 'pm-goals-v1' // localStorage: цели (может быть зашифровано PIN-ом)
 // CloudStorage: данные в чанках под именем "data" (data_0…/data_n), тема в "theme",
 // профиль в чанках под именем "profile" (аватар не влезает в один ключ 4096).
 

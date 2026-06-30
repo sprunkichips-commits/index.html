@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Settings } from 'lucide-react'
 import { StoreProvider, useStore } from './store/StoreContext'
+import { GoalsProvider } from './store/GoalsContext'
 import { OWNER_ID, tgUser } from './lib/telegram'
 import { Sidebar } from './components/Sidebar'
 import { BottomNav } from './components/BottomNav'
@@ -15,6 +16,7 @@ import { Dashboard } from './screens/Dashboard'
 import { Transactions } from './screens/Transactions'
 import { Stats } from './screens/Stats'
 import { Investments } from './screens/Investments'
+import { Goals } from './screens/Goals'
 import type { Tx, TxType } from './lib/data'
 
 // Мягкий клиентский UX-замок (не авторизация) — см. lib/telegram.ts
@@ -24,7 +26,9 @@ export default function App() {
   if (blocked) return <Blocked />
   return (
     <StoreProvider>
-      <Shell />
+      <GoalsProvider>
+        <Shell />
+      </GoalsProvider>
     </StoreProvider>
   )
 }
@@ -52,7 +56,7 @@ function Shell() {
         <Sidebar onSettings={openSettings} />
         <main className="min-w-0 flex-1 px-4 pb-28 pt-5 lg:px-8 lg:pb-10 lg:pt-7">
           <header className="mb-5 flex items-center justify-between gap-2">
-            <MonthSelector />
+            {tab === 'goals' ? <div className="text-lg font-bold">Цели и привычки</div> : <MonthSelector />}
             <div className="flex items-center gap-2">
               <Button className="hidden lg:inline-flex" onClick={() => openAdd('Расход')}>
                 <Plus size={18} /> Добавить
@@ -71,6 +75,7 @@ function Shell() {
           {tab === 'tx' && <Transactions openAdd={openAdd} openDetail={openDetail} />}
           {tab === 'stats' && <Stats />}
           {tab === 'inv' && <Investments />}
+          {tab === 'goals' && <Goals />}
         </main>
       </div>
 

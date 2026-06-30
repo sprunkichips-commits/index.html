@@ -40,6 +40,13 @@
   html, body, #root {
     height: 100%;
   }
+  /* Ведём себя как нативное приложение: только вертикальная прокрутка, без
+     pinch-zoom и double-tap-zoom. Дополняется обработчиками в lockZoom(). */
+  html {
+    touch-action: pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     margin: 0;
     background: hsl(var(--bg));
