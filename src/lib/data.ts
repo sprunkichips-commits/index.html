@@ -81,11 +81,46 @@ export function cc(c: string): string {
   return COL[c] || '#9AA0A6'
 }
 
+// Английские подписи категорий/типов для отображения. Сами значения в данных
+// остаются прежними (рус.) — это лишь слой перевода для UI, данные не ломаются.
+export const CAT_EN: Record<string, string> = {
+  // доходные
+  YouTube: 'YouTube',
+  Реклама: 'Sponsorships',
+  'Офлайн-работа': 'Day job',
+  Близкие: 'Family',
+  'Прочий доход': 'Other income',
+  // расходные
+  Жильё: 'Housing',
+  Продукты: 'Groceries',
+  'Кафе и рестораны': 'Dining out',
+  Транспорт: 'Transport',
+  'Интернет и связь': 'Internet & phone',
+  'Подписки и сервисы': 'Subscriptions',
+  Оборудование: 'Equipment',
+  'Софт и инструменты': 'Software & tools',
+  'Реклама и продвижение': 'Ads & promo',
+  Здоровье: 'Health',
+  Развлечения: 'Entertainment',
+  Подарки: 'Gifts',
+  Одежда: 'Clothing',
+  Налоги: 'Taxes',
+  'Прочие расходы': 'Other',
+}
+
+export function catLabel(c: string): string {
+  return CAT_EN[c] || c
+}
+
+export function typeLabel(t: TxType): string {
+  return t === 'Доход' ? 'Income' : 'Expense'
+}
+
 export const MONTHS = [
-  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ]
-export const MS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+export const MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export const TYPES = ['Акции', 'ETF', 'Облигации', 'Крипта', 'Депозит', 'Недвижимость', 'Прочее']
 
@@ -361,18 +396,15 @@ export function computeStats(data: AppData, cursor: Cursor): Stats {
 
 export const DEMO: AppData = {
   transactions: [
-    { id: uid(), date: '2026-06-01', type: 'Доход', category: 'Офлайн-работа', amount: 120000, note: 'Зарплата' },
+    { id: uid(), date: '2026-06-01', type: 'Доход', category: 'Офлайн-работа', amount: 120000, note: 'Salary' },
     { id: uid(), date: '2026-06-05', type: 'Доход', category: 'YouTube', amount: 45000, note: 'AdSense' },
-    { id: uid(), date: '2026-06-10', type: 'Доход', category: 'Реклама', amount: 80000, note: 'Интеграция' },
-    { id: uid(), date: '2026-06-03', type: 'Расход', category: 'Жильё', amount: 35000, note: 'Аренда' },
-    { id: uid(), date: '2026-06-03', type: 'Расход', category: 'Транспорт', amount: 600, note: 'Метро' },
+    { id: uid(), date: '2026-06-10', type: 'Доход', category: 'Реклама', amount: 80000, note: 'Integration' },
+    { id: uid(), date: '2026-06-03', type: 'Расход', category: 'Жильё', amount: 35000, note: 'Rent' },
+    { id: uid(), date: '2026-06-03', type: 'Расход', category: 'Транспорт', amount: 600, note: 'Metro' },
     { id: uid(), date: '2026-06-08', type: 'Расход', category: 'Подписки и сервисы', amount: 4500, note: 'Adobe' },
-    { id: uid(), date: '2026-06-12', type: 'Расход', category: 'Оборудование', amount: 60000, note: 'Микрофон' },
-    { id: uid(), date: '2026-06-14', type: 'Расход', category: 'Подарки', amount: 5000, note: 'ДР друга' },
-    { id: uid(), date: '2026-06-22', type: 'Расход', category: 'Продукты', amount: 3100, note: 'Магазин' },
+    { id: uid(), date: '2026-06-12', type: 'Расход', category: 'Оборудование', amount: 60000, note: 'Microphone' },
+    { id: uid(), date: '2026-06-14', type: 'Расход', category: 'Подарки', amount: 5000, note: "Friend's birthday" },
+    { id: uid(), date: '2026-06-22', type: 'Расход', category: 'Продукты', amount: 3100, note: 'Grocery store' },
   ],
-  investments: [
-    { id: uid(), name: 'S&P 500 ETF', type: 'ETF', invested: 200000, current: 230000 },
-    { id: uid(), name: 'Bitcoin', type: 'Крипта', invested: 100000, current: 138000 },
-  ],
+  investments: [],
 }

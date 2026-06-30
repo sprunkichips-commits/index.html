@@ -8,9 +8,9 @@ import { cn } from '@/lib/utils'
 import type { Tx, TxType } from '@/lib/data'
 
 const FILTERS: { value: Filter; label: string }[] = [
-  { value: 'Все', label: 'Все' },
-  { value: 'Доход', label: 'Доходы' },
-  { value: 'Расход', label: 'Расходы' },
+  { value: 'Все', label: 'All' },
+  { value: 'Доход', label: 'Income' },
+  { value: 'Расход', label: 'Expense' },
 ]
 
 export function Transactions({
@@ -73,12 +73,12 @@ export function Transactions({
       <Card className="p-4">
         {groups.length === 0 ? (
           <div className="flex flex-col items-center py-10 text-center">
-            <p className="text-[13px] text-faint">Здесь появятся твои операции</p>
+            <p className="text-[13px] text-faint">Your transactions will show up here</p>
             <button
               onClick={() => openAdd('Расход')}
               className="mt-3 inline-flex h-11 items-center gap-2 rounded-2xl bg-accent px-4 text-sm font-semibold text-accent-ink shadow-fab transition active:scale-95"
             >
-              <Plus size={16} /> Добавить
+              <Plus size={16} /> Add
             </button>
           </div>
         ) : (
@@ -88,7 +88,7 @@ export function Transactions({
               <div key={g.date} className="mb-1">
                 <div className="flex items-center justify-between border-b border-line/10 py-1.5">
                   <span className="text-xs font-semibold capitalize text-sub">
-                    {dt.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' })}
+                    {dt.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'long' })}
                   </span>
                   <span className={cn('mono text-xs font-semibold', g.sum >= 0 ? 'text-pos' : 'text-ink')}>
                     {rubS(g.sum)}

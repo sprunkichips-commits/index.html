@@ -28,12 +28,12 @@ export function Dashboard({
     [data.transactions],
   )
   const ioT = D.income + D.expense || 1
-  const initial = (displayName || 'Я').trim().slice(0, 1).toUpperCase()
+  const initial = (displayName || 'U').trim().slice(0, 1).toUpperCase()
 
   const actions = [
-    { label: 'Расход', icon: ArrowDownRight, cls: 'text-neg', onClick: () => openAdd('Расход') },
-    { label: 'Доход', icon: ArrowUpRight, cls: 'text-pos', onClick: () => openAdd('Доход') },
-    { label: 'Статистика', icon: BarChart3, cls: 'text-accent', onClick: () => setTab('stats') },
+    { label: 'Expense', icon: ArrowDownRight, cls: 'text-neg', onClick: () => openAdd('Расход') },
+    { label: 'Income', icon: ArrowUpRight, cls: 'text-pos', onClick: () => openAdd('Доход') },
+    { label: 'Stats', icon: BarChart3, cls: 'text-accent', onClick: () => setTab('stats') },
   ]
 
   return (
@@ -42,7 +42,7 @@ export function Dashboard({
       <div className="flex items-center gap-3">
         <button
           onClick={openProfile}
-          aria-label="Изменить профиль"
+          aria-label="Edit profile"
           className="group flex min-w-0 flex-1 items-center gap-3 text-left"
         >
           <span className="grid h-11 w-11 flex-none place-items-center overflow-hidden rounded-full bg-accent/20 text-base font-bold text-accent">
@@ -55,14 +55,14 @@ export function Dashboard({
           <span className="min-w-0">
             <span className="block truncate text-base font-bold">{displayName}</span>
             <span className="flex items-center gap-1 text-xs text-faint transition group-hover:text-sub">
-              <Pencil size={11} /> изменить профиль
+              <Pencil size={11} /> edit profile
             </span>
           </span>
         </button>
-        <button className="grid h-10 w-10 flex-none place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Поиск">
+        <button className="grid h-10 w-10 flex-none place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Search">
           <Search size={18} />
         </button>
-        <button className="grid h-10 w-10 flex-none place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Уведомления">
+        <button className="grid h-10 w-10 flex-none place-items-center rounded-full text-sub transition hover:bg-line/[0.07] hover:text-ink" aria-label="Notifications">
           <Bell size={18} />
         </button>
       </div>
@@ -71,7 +71,7 @@ export function Dashboard({
       <Card hover className="overflow-hidden p-5">
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-xs uppercase tracking-wide text-faint">Остаток за месяц</div>
+            <div className="text-xs uppercase tracking-wide text-faint">Balance this month</div>
             <div className={cn('mono mt-1 text-[34px] font-bold leading-none', D.net >= 0 ? 'text-pos' : 'text-neg')}>
               {rubS(D.net)}
             </div>
@@ -93,7 +93,7 @@ export function Dashboard({
               <ArrowUpRight size={16} />
             </span>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-faint">Доход</div>
+              <div className="text-[11px] uppercase tracking-wide text-faint">Income</div>
               <div className="mono text-sm font-semibold">{rub(D.income)}</div>
             </div>
           </div>
@@ -102,7 +102,7 @@ export function Dashboard({
               <ArrowDownRight size={16} />
             </span>
             <div>
-              <div className="text-[11px] uppercase tracking-wide text-faint">Расход</div>
+              <div className="text-[11px] uppercase tracking-wide text-faint">Expense</div>
               <div className="mono text-sm font-semibold">{rub(D.expense)}</div>
             </div>
           </div>
@@ -134,9 +134,9 @@ export function Dashboard({
       {/* Последние операции */}
       <Card className="p-4">
         <div className="mb-1 flex items-center justify-between">
-          <div className="text-sm font-semibold">Последние операции</div>
+          <div className="text-sm font-semibold">Recent transactions</div>
           <button onClick={() => setTab('tx')} className="text-xs font-medium text-accent transition hover:opacity-80">
-            Все →
+            All →
           </button>
         </div>
         {recent.length === 0 ? (
@@ -159,15 +159,15 @@ function Empty({ onAdd }: { onAdd: () => void }) {
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-line/[0.06] text-faint">
         <Wallet size={26} />
       </div>
-      <div className="mt-3 text-base font-semibold">Пока пусто</div>
+      <div className="mt-3 text-base font-semibold">Nothing yet</div>
       <p className="mt-1 max-w-[260px] text-[13px] text-sub">
-        Запиши первый доход или расход — всё посчитается и сохранится автоматически.
+        Add your first income or expense — everything is calculated and saved automatically.
       </p>
       <button
         onClick={onAdd}
         className="mt-4 inline-flex h-11 items-center gap-2 rounded-2xl bg-accent px-4 text-sm font-semibold text-accent-ink shadow-fab transition active:scale-95"
       >
-        Добавить операцию
+        Add transaction
       </button>
     </div>
   )

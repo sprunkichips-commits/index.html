@@ -36,7 +36,7 @@ import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 import { today } from '@/lib/format'
 
 export type Theme = 'dark' | 'light'
-export type Tab = 'dash' | 'tx' | 'stats' | 'inv' | 'goals'
+export type Tab = 'dash' | 'tx' | 'stats' | 'goals'
 export type Filter = 'Все' | 'Доход' | 'Расход'
 
 const THEME_BG: Record<Theme, string> = { dark: '#0F110E', light: '#F4F5EF' }
@@ -109,7 +109,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const toastTimer = useRef<number | null>(null)
 
   const firstName = tgUser?.first_name?.trim() || ''
-  const displayName = profile.name || firstName || 'Гость'
+  const displayName = profile.name || firstName || 'Guest'
 
   // Persist helper — localStorage зеркало + CloudStorage (как в исходнике).
   const persist = useCallback((next: AppData) => {
@@ -171,7 +171,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const d = new Date(input.date + 'T00:00:00')
       setCursor({ y: d.getFullYear(), m: d.getMonth() })
       persist(next)
-      toast('Добавлено')
+      toast('Added')
       return true
     },
     [data, persist, toast],
@@ -193,7 +193,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!name || invested <= 0) return false
       const inv: Inv = { id: uid(), name, type, invested, current }
       persist({ ...data, investments: [...data.investments, inv] })
-      toast('Актив добавлен')
+      toast('Asset added')
       return true
     },
     [data, persist, toast],
@@ -210,12 +210,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (obj: unknown) => {
       const c = sanitize(obj)
       if (!c) {
-        toast('Файл не подходит')
+        toast('Invalid file')
         return
       }
       setCursor(cursorFromData(c))
       persist(c)
-      toast('Восстановлено')
+      toast('Restored')
     },
     [persist, toast],
   )
@@ -227,7 +227,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const clearAll = useCallback(() => {
     setCursor(cursorFromData(emptyData()))
     persist(emptyData())
-    toast('Очищено')
+    toast('Cleared')
   }, [persist, toast])
 
   const download = useCallback(() => {
@@ -241,9 +241,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      toast('Файл скачан')
+      toast('File downloaded')
     } catch {
-      toast('Не удалось скачать')
+      toast('Could not download')
     }
   }, [data, toast])
 
@@ -251,11 +251,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const str = JSON.stringify(data)
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(str).then(
-        () => toast('Скопировано'),
-        () => toast('Не удалось скопировать'),
+        () => toast('Copied'),
+        () => toast('Could not copy'),
       )
     } else {
-      toast('Буфер недоступен')
+      toast('Clipboard unavailable')
     }
   }, [data, toast])
 

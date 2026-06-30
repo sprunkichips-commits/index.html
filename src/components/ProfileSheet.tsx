@@ -12,7 +12,7 @@ import { AVATAR_MAX, NAME_MAX } from '@/lib/data'
  */
 function fileToAvatar(file: File, max = 240): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) return reject(new Error('Не картинка'))
+    if (!file.type.startsWith('image/')) return reject(new Error('Not an image'))
     const reader = new FileReader()
     reader.onerror = () => reject(reader.error || new Error('read'))
     reader.onload = () => {
@@ -65,12 +65,12 @@ export function ProfileSheet({ open, onOpenChange }: { open: boolean; onOpenChan
     try {
       const url = await fileToAvatar(f)
       if (url.length > AVATAR_MAX) {
-        toast('Картинка слишком большая')
+        toast('Image is too large')
       } else {
         setAvatar(url)
       }
     } catch {
-      toast('Не удалось открыть фото')
+      toast('Could not open the photo')
     } finally {
       setBusy(false)
     }
@@ -78,19 +78,19 @@ export function ProfileSheet({ open, onOpenChange }: { open: boolean; onOpenChan
 
   function save() {
     setProfile({ name, avatar })
-    toast('Профиль сохранён')
+    toast('Profile saved')
     onOpenChange(false)
   }
 
-  const initial = (name || firstName || 'Я').trim().slice(0, 1).toUpperCase()
+  const initial = (name || firstName || 'U').trim().slice(0, 1).toUpperCase()
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="Профиль">
+    <Sheet open={open} onOpenChange={onOpenChange} title="Profile">
       <div className="mb-5 flex flex-col items-center gap-3">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          aria-label="Выбрать аватар"
+          aria-label="Choose avatar"
           className="group relative h-24 w-24 overflow-hidden rounded-full border border-line/12 bg-accent/15 transition active:scale-95"
         >
           {avatar ? (
@@ -101,7 +101,7 @@ export function ProfileSheet({ open, onOpenChange }: { open: boolean; onOpenChan
             </span>
           )}
           <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/45 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
-            <Camera size={12} /> {busy ? '…' : 'Фото'}
+            <Camera size={12} /> {busy ? '…' : 'Photo'}
           </span>
         </button>
         {avatar && (
@@ -110,19 +110,19 @@ export function ProfileSheet({ open, onOpenChange }: { open: boolean; onOpenChan
             onClick={() => setAvatar('')}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-neg transition hover:opacity-80"
           >
-            <Trash2 size={13} /> Убрать фото
+            <Trash2 size={13} /> Remove photo
           </button>
         )}
       </div>
 
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPick} />
 
-      <label className="mb-1.5 block text-xs font-medium text-sub">Ник</label>
+      <label className="mb-1.5 block text-xs font-medium text-sub">Nickname</label>
       <div className="mb-5 flex items-center gap-2 rounded-xl border border-line/12 bg-line/[0.04] px-3">
         <User size={16} className="flex-none text-faint" />
         <input
           maxLength={NAME_MAX}
-          placeholder={firstName || 'Как тебя зовут'}
+          placeholder={firstName || 'Your name'}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="h-11 w-full bg-transparent text-base text-ink outline-none placeholder:text-faint"
@@ -131,10 +131,10 @@ export function ProfileSheet({ open, onOpenChange }: { open: boolean; onOpenChan
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" onClick={() => onOpenChange(false)}>
-          Отмена
+          Cancel
         </Button>
         <Button variant="accent" onClick={save}>
-          Сохранить
+          Save
         </Button>
       </div>
     </Sheet>

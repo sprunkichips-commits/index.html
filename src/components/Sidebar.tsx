@@ -12,8 +12,8 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
           <Wallet size={18} />
         </div>
         <div>
-          <div className="text-sm font-bold leading-tight">Деньги</div>
-          <div className="text-[11px] text-faint">личный учёт</div>
+          <div className="text-sm font-bold leading-tight">Money</div>
+          <div className="text-[11px] text-faint">personal tracker</div>
         </div>
       </div>
 
@@ -46,14 +46,14 @@ export function Sidebar({ onSettings }: { onSettings: () => void }) {
           className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-sub transition hover:bg-line/[0.06] hover:text-ink"
         >
           {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
-          {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+          {theme === 'dark' ? 'Light theme' : 'Dark theme'}
         </button>
         <button
           onClick={onSettings}
           className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-sub transition hover:bg-line/[0.06] hover:text-ink"
         >
           <Settings size={19} />
-          Настройки и копия
+          Settings & backup
         </button>
       </div>
     </aside>

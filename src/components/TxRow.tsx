@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react'
-import { type Tx } from '@/lib/data'
+import { type Tx, catLabel } from '@/lib/data'
 import { rub } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { CategoryIcon } from './CategoryIcon'
@@ -15,7 +15,7 @@ export function TxRow({
 }) {
   const inc = tx.type === 'Доход'
   const d = new Date(tx.date + 'T00:00:00')
-  const dl = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+  const dl = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
   return (
     <div className="group flex items-center gap-1">
       <button
@@ -26,7 +26,7 @@ export function TxRow({
         <CategoryIcon category={tx.category} income={inc} />
         <div className="min-w-0 flex-1">
           {/* React экранирует пользовательский текст автоматически */}
-          <div className="truncate text-sm font-medium text-ink">{tx.category}</div>
+          <div className="truncate text-sm font-medium text-ink">{catLabel(tx.category)}</div>
           <div className="truncate text-xs text-faint">
             {dl}
             {tx.note ? ' · ' + tx.note : ''}
@@ -39,7 +39,7 @@ export function TxRow({
       </button>
       <button
         onClick={() => onDelete(tx.id)}
-        aria-label="Удалить"
+        aria-label="Delete"
         className="grid h-11 w-11 flex-none place-items-center rounded-xl text-faint transition hover:bg-neg/15 hover:text-neg active:scale-95"
       >
         <Trash2 size={16} />

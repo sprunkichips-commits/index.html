@@ -17,28 +17,21 @@ import {
   MAX_TASKS,
   parseGoals,
   TITLE_MAX,
-  validPin,
 } from '@/lib/goals'
 import { uid, validDate } from '@/lib/data'
 import { GKEY, bigGet, bigSet, sget, sset } from '@/lib/storage'
-import { hasCloud } from '@/lib/telegram'
-import { deriveKey, decryptJSON, encryptJSON, hasCrypto, randomSaltB64 } from '@/lib/crypto'
+import { hasCloud, tgUserId } from '@/lib/telegram'
+import { decryptJSON, deriveAutoKey, encryptJSON, hasCrypto } from '@/lib/crypto'
 import { useStore } from './StoreContext'
 
-export type GoalsStatus = 'locked' | 'ready'
+export type GoalsStatus = 'loading' | 'ready'
 
 interface GoalsStore {
   status: GoalsStatus
   data: GoalsData
   encrypted: boolean
-  cryptoOk: boolean
-  unlockError: string | null
   streak: number
   todayKey: string
-  unlock: (pin: string) => Promise<boolean>
-  enablePin: (pin: string) => Promise<boolean>
-  changePin: (pin: string) => Promise<boolean>
-  disablePin: () => Promise<void>
   addGoal: (title: string, targetDate: string) => boolean
   editGoal: (id: string, title: string, targetDate: string) => void
   delGoal: (id: string) => void
@@ -57,58 +50,59 @@ export function useGoals(): GoalsStore {
   return ctx
 }
 
-type ParsedEnv =
-  | { kind: 'enc'; salt: string; blob: string }
-  | { kind: 'plain'; data: GoalsData }
-  | null
+interface Loaded {
+  data: GoalsData
+  legacy: boolean // было незашифрованным (enc:0) — нужно пересохранить зашифрованным
+}
 
-function parseEnv(str: string | null): ParsedEnv {
-  if (!str) return null
+async function loadFrom(envStr: string | null, key: CryptoKey | null): Promise<Loaded> {
+  if (!envStr) return { data: emptyGoals(), legacy: false }
+  let e: { enc?: number; blob?: string; data?: unknown }
   try {
-    const e = JSON.parse(str)
-    if (e && e.enc === 1 && typeof e.salt === 'string' && typeof e.blob === 'string') {
-      return { kind: 'enc', salt: e.salt, blob: e.blob }
-    }
-    if (e && e.enc === 0) return { kind: 'plain', data: parseGoals(e.data) }
+    e = JSON.parse(envStr)
   } catch {
-    /* ignore */
+    return { data: emptyGoals(), legacy: false }
   }
-  return null
+  if (e?.enc === 2 && typeof e.blob === 'string') {
+    if (!key) return { data: emptyGoals(), legacy: false }
+    try {
+      return { data: parseGoals(await decryptJSON(e.blob, key)), legacy: false }
+    } catch {
+      return { data: emptyGoals(), legacy: false }
+    }
+  }
+  if (e?.enc === 0) return { data: parseGoals(e.data), legacy: true } // старый незашифрованный формат
+  return { data: emptyGoals(), legacy: false }
 }
 
 export function GoalsProvider({ children }: { children: ReactNode }) {
   const { toast } = useStore()
-  const initial = useRef<ParsedEnv>(parseEnv(sget(GKEY))).current
-
-  const [status, setStatus] = useState<GoalsStatus>(initial?.kind === 'enc' ? 'locked' : 'ready')
-  const [data, setData] = useState<GoalsData>(initial?.kind === 'plain' ? initial.data : emptyGoals())
-  const [encrypted, setEncrypted] = useState(initial?.kind === 'enc')
-  const [unlockError, setUnlockError] = useState<string | null>(null)
+  const [status, setStatus] = useState<GoalsStatus>('loading')
+  const [data, setData] = useState<GoalsData>(emptyGoals())
+  const [encrypted, setEncrypted] = useState(false)
 
   const dataRef = useRef<GoalsData>(data)
   const keyRef = useRef<CryptoKey | null>(null)
-  const saltRef = useRef<string | null>(initial?.kind === 'enc' ? initial.salt : null)
-  const blobRef = useRef<string | null>(initial?.kind === 'enc' ? initial.blob : null)
-  const encRef = useRef<boolean>(initial?.kind === 'enc')
-
   const todayKey = localDateStr()
 
-  // ----- Сохранение: собрать конверт (шифрованный или нет) -> localStorage + CloudStorage -----
-  const persist = useCallback(async (next: GoalsData) => {
-    try {
-      let env: string
-      if (encRef.current && keyRef.current && saltRef.current) {
-        const blob = await encryptJSON(next, keyRef.current)
-        env = JSON.stringify({ enc: 1, salt: saltRef.current, blob })
-      } else {
-        env = JSON.stringify({ enc: 0, data: next })
+  // Сохранение: всегда шифруем (если доступен Web Crypto), иначе — открытым текстом.
+  const persist = useCallback(
+    async (next: GoalsData) => {
+      try {
+        let env: string
+        if (keyRef.current) {
+          env = JSON.stringify({ enc: 2, blob: await encryptJSON(next, keyRef.current) })
+        } else {
+          env = JSON.stringify({ enc: 0, data: next })
+        }
+        sset(GKEY, env)
+        if (hasCloud) await bigSet('goals', env)
+      } catch {
+        toast('Could not save goals')
       }
-      sset(GKEY, env)
-      if (hasCloud) await bigSet('goals', env)
-    } catch {
-      toast('Не удалось сохранить цели')
-    }
-  }, [toast])
+    },
+    [toast],
+  )
 
   const apply = useCallback(
     (next: GoalsData) => {
@@ -119,83 +113,48 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     [persist],
   )
 
-  // ----- Старт: подтянуть из CloudStorage (источник истины), как у финансов -----
+  // Старт: вывести ключ (из id пользователя), подтянуть данные (облако > локально), расшифровать.
   const booted = useRef(false)
   useEffect(() => {
     if (booted.current) return
     booted.current = true
-    if (!hasCloud) return
-    bigGet('goals').then((cloudStr) => {
-      if (cloudStr) {
-        const env = parseEnv(cloudStr)
-        sset(GKEY, cloudStr)
-        if (env?.kind === 'enc') {
-          saltRef.current = env.salt
-          blobRef.current = env.blob
-          encRef.current = true
-          setEncrypted(true)
-          setStatus('locked')
-        } else if (env?.kind === 'plain') {
-          encRef.current = false
-          keyRef.current = null
-          setEncrypted(false)
-          dataRef.current = env.data
-          setData(env.data)
-          setStatus('ready')
+    ;(async () => {
+      let key: CryptoKey | null = null
+      if (hasCrypto()) {
+        try {
+          key = await deriveAutoKey(String(tgUserId ?? 'browser-local'))
+        } catch {
+          key = null
         }
-      } else {
-        // в облаке пусто, а локально что-то есть — поднимаем наверх
-        const local = sget(GKEY)
-        if (local) bigSet('goals', local)
       }
-    })
-  }, [])
-
-  // ----- PIN / шифрование -----
-  const unlock = useCallback(async (pin: string): Promise<boolean> => {
-    if (!saltRef.current || !blobRef.current) return false
-    try {
-      const key = await deriveKey(pin, saltRef.current)
-      const obj = await decryptJSON(blobRef.current, key)
-      const parsed = parseGoals(obj)
       keyRef.current = key
-      encRef.current = true
-      setEncrypted(true)
-      dataRef.current = parsed
-      setData(parsed)
+      setEncrypted(!!key)
+
+      let envStr = sget(GKEY)
+      let fromCloud = false
+      if (hasCloud) {
+        const cloudStr = await bigGet('goals')
+        if (cloudStr) {
+          envStr = cloudStr
+          sset(GKEY, cloudStr)
+          fromCloud = true
+        }
+      }
+
+      const loaded = await loadFrom(envStr, key)
+      dataRef.current = loaded.data
+      setData(loaded.data)
       setStatus('ready')
-      setUnlockError(null)
-      return true
-    } catch {
-      setUnlockError('Неверный PIN-код')
-      return false
-    }
-  }, [])
 
-  const enablePin = useCallback(
-    async (pin: string): Promise<boolean> => {
-      if (!hasCrypto() || !validPin(pin)) return false
-      const salt = randomSaltB64()
-      keyRef.current = await deriveKey(pin, salt)
-      saltRef.current = salt
-      encRef.current = true
-      setEncrypted(true)
-      await persist(dataRef.current)
-      return true
-    },
-    [persist],
-  )
-
-  const changePin = enablePin
-
-  const disablePin = useCallback(async () => {
-    keyRef.current = null
-    encRef.current = false
-    setEncrypted(false)
-    await persist(dataRef.current)
+      // Миграция старого незашифрованного формата → пересохранить зашифрованным.
+      // А также поднять локальные данные в облако, если там пусто.
+      const hasContent = loaded.data.goals.length || loaded.data.tasks.length || Object.keys(loaded.data.logs).length
+      if ((loaded.legacy && key) || (hasCloud && !fromCloud && hasContent)) {
+        void persist(loaded.data)
+      }
+    })()
   }, [persist])
 
-  // ----- CRUD целей/задач -----
   const addGoal = useCallback(
     (title: string, targetDate: string): boolean => {
       const t = title.trim().slice(0, TITLE_MAX)
@@ -271,31 +230,10 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<GoalsStore>(
     () => ({
-      status,
-      data,
-      encrypted,
-      cryptoOk: hasCrypto(),
-      unlockError,
-      streak,
-      todayKey,
-      unlock,
-      enablePin,
-      changePin,
-      disablePin,
-      addGoal,
-      editGoal,
-      delGoal,
-      addTask,
-      editTask,
-      delTask,
-      toggleToday,
-      clearAllGoals,
+      status, data, encrypted, streak, todayKey,
+      addGoal, editGoal, delGoal, addTask, editTask, delTask, toggleToday, clearAllGoals,
     }),
-    [
-      status, data, encrypted, unlockError, streak, todayKey,
-      unlock, enablePin, changePin, disablePin, addGoal, editGoal, delGoal,
-      addTask, editTask, delTask, toggleToday, clearAllGoals,
-    ],
+    [status, data, encrypted, streak, todayKey, addGoal, editGoal, delGoal, addTask, editTask, delTask, toggleToday, clearAllGoals],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

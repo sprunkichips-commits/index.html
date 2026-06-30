@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Select } from './ui/select'
 import { useStore } from '@/store/StoreContext'
-import { EXPENSE, INCOME, NOTE_MAX, type TxType } from '@/lib/data'
+import { EXPENSE, INCOME, NOTE_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
 import { grp, today } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -50,14 +50,14 @@ export function AddSheet({
     const num = parseInt(amount.replace(/\D/g, '').slice(0, 13)) || 0
     const ok = addTx({ type, amount: num, category, date, note })
     if (!ok) {
-      toast('Заполни сумму и категорию')
+      toast('Enter an amount and a category')
       return
     }
     onOpenChange(false)
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="Новая операция">
+    <Sheet open={open} onOpenChange={onOpenChange} title="New transaction">
       <div className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-line/10 bg-line/[0.04] p-1">
         {(['Расход', 'Доход'] as TxType[]).map((t) => (
           <button
@@ -72,12 +72,12 @@ export function AddSheet({
                 : 'text-sub hover:text-ink',
             )}
           >
-            {t}
+            {typeLabel(t)}
           </button>
         ))}
       </div>
 
-      <label className="mb-1.5 block text-xs font-medium text-sub">Сумма</label>
+      <label className="mb-1.5 block text-xs font-medium text-sub">Amount</label>
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-line/12 bg-line/[0.04] px-3">
         <input
           autoFocus
@@ -90,27 +90,28 @@ export function AddSheet({
         <span className="text-lg font-semibold text-faint">₽</span>
       </div>
 
-      <label className="mb-1.5 block text-xs font-medium text-sub">Категория</label>
+      <label className="mb-1.5 block text-xs font-medium text-sub">Category</label>
       <div className="mb-3">
         <Select
           value={category}
           onValueChange={setCategory}
-          placeholder="Выбери категорию…"
+          placeholder="Pick a category…"
           options={list}
-          ariaLabel="Категория"
+          labelFor={catLabel}
+          ariaLabel="Category"
         />
       </div>
 
-      <label className="mb-1.5 block text-xs font-medium text-sub">Дата</label>
+      <label className="mb-1.5 block text-xs font-medium text-sub">Date</label>
       <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mb-3" />
 
       <label className="mb-1.5 block text-xs font-medium text-sub">
-        Заметка <span className="text-faint">(необязательно)</span>
+        Note <span className="text-faint">(optional)</span>
       </label>
       <Input
         type="text"
         maxLength={NOTE_MAX}
-        placeholder="Например: магазин у дома"
+        placeholder="e.g. corner store"
         value={note}
         onChange={(e) => setNote(e.target.value)}
         className="mb-4"
@@ -118,10 +119,10 @@ export function AddSheet({
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" onClick={() => onOpenChange(false)}>
-          Отмена
+          Cancel
         </Button>
         <Button variant="accent" onClick={save}>
-          Добавить
+          Add
         </Button>
       </div>
     </Sheet>

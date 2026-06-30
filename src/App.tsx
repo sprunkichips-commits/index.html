@@ -15,7 +15,6 @@ import { Button } from './components/ui/button'
 import { Dashboard } from './screens/Dashboard'
 import { Transactions } from './screens/Transactions'
 import { Stats } from './screens/Stats'
-import { Investments } from './screens/Investments'
 import { Goals } from './screens/Goals'
 import type { Tx, TxType } from './lib/data'
 
@@ -56,14 +55,14 @@ function Shell() {
         <Sidebar onSettings={openSettings} />
         <main className="min-w-0 flex-1 px-4 pb-28 pt-5 lg:px-8 lg:pb-10 lg:pt-7">
           <header className="mb-5 flex items-center justify-between gap-2">
-            {tab === 'goals' ? <div className="text-lg font-bold">Цели и привычки</div> : <MonthSelector />}
+            {tab === 'goals' ? <div className="text-lg font-bold">Goals & habits</div> : <MonthSelector />}
             <div className="flex items-center gap-2">
               <Button className="hidden lg:inline-flex" onClick={() => openAdd('Расход')}>
-                <Plus size={18} /> Добавить
+                <Plus size={18} /> Add
               </Button>
               <button
                 onClick={openSettings}
-                aria-label="Настройки"
+                aria-label="Settings"
                 className="glass grid h-11 w-11 place-items-center rounded-2xl border-line/10 text-sub transition hover:text-ink active:scale-95 lg:hidden"
               >
                 <Settings size={18} />
@@ -74,7 +73,6 @@ function Shell() {
           {tab === 'dash' && <Dashboard openAdd={openAdd} openProfile={openProfile} openDetail={openDetail} />}
           {tab === 'tx' && <Transactions openAdd={openAdd} openDetail={openDetail} />}
           {tab === 'stats' && <Stats />}
-          {tab === 'inv' && <Investments />}
           {tab === 'goals' && <Goals />}
         </main>
       </div>
@@ -95,8 +93,8 @@ function Blocked() {
       <div className="app-bg" />
       <div className="grid min-h-full place-items-center p-6 text-center">
         <div className="glass max-w-sm rounded-3xl px-8 py-10">
-          <div className="text-lg font-semibold">Это личное приложение</div>
-          <p className="mt-2 text-sm text-sub">Доступ только у владельца.</p>
+          <div className="text-lg font-semibold">This is a private app</div>
+          <p className="mt-2 text-sm text-sub">Only the owner has access.</p>
         </div>
       </div>
     </>

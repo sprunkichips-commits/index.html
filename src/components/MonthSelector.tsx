@@ -8,7 +8,7 @@ export function MonthSelector() {
     <div className="flex flex-none items-center gap-0.5 rounded-2xl glass border-line/10 p-1">
       <button
         onClick={() => shiftMonth(-1)}
-        aria-label="Предыдущий месяц"
+        aria-label="Previous month"
         className="grid h-10 w-10 place-items-center rounded-xl text-sub transition hover:bg-line/[0.08] hover:text-ink active:scale-95"
       >
         <ChevronLeft size={18} />
@@ -18,7 +18,7 @@ export function MonthSelector() {
       </span>
       <button
         onClick={() => shiftMonth(1)}
-        aria-label="Следующий месяц"
+        aria-label="Next month"
         className="grid h-10 w-10 place-items-center rounded-xl text-sub transition hover:bg-line/[0.08] hover:text-ink active:scale-95"
       >
         <ChevronRight size={18} />

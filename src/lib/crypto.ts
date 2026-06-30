@@ -33,6 +33,20 @@ export function randomSaltB64(): string {
   return bufToB64(crypto.getRandomValues(new Uint8Array(16)).buffer)
 }
 
+// Постоянная соль приложения (не секрет). Секретность ключа держится на
+// идентификаторе пользователя Telegram (у каждого свой), а не на этой строке.
+const STATIC_SALT_B64 = 'Z29hbHMtc2FsdC0wMDAwMQ=='
+
+/**
+ * Автоматический ключ «в коде»: выводится из идентификатора пользователя — без
+ * пароля и без ввода. Даёт прозрачное шифрование данных на диске: в хранилище
+ * лежит только шифротекст. Это защита от прямого вытаскивания/чтения данных, а не
+ * пароль (исходник публичный) — поэтому пишем об этом честно в README.
+ */
+export async function deriveAutoKey(userSecret: string): Promise<CryptoKey> {
+  return deriveKey('pmg:v1:' + userSecret, STATIC_SALT_B64)
+}
+
 /** Выводит AES-ключ из PIN и соли (base64). */
 export async function deriveKey(pin: string, saltB64: string): Promise<CryptoKey> {
   const baseKey = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey'])

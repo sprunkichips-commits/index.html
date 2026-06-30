@@ -99,6 +99,16 @@
   .pill {
     @apply inline-flex items-center justify-center rounded-full text-sm font-semibold transition;
   }
+  /* Нижняя навигация — матовое «стекло» как в iOS: тянется до самого низа
+     (включая safe-area), сильнее блюр, полупрозрачный фон. */
+  .nav-glass {
+    background: hsl(var(--surface) / 0.72);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+  }
+  .light .nav-glass {
+    background: hsl(var(--surface) / 0.8);
+  }
 }
 
 /* Fintech background: deep gradient + radial glow + faint star dots */

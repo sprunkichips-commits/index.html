@@ -35,7 +35,7 @@ export function Sheet({
             <Dialog.Title className="text-lg font-bold">{title}</Dialog.Title>
             <Dialog.Close
               className="grid place-items-center h-10 w-10 rounded-xl text-sub hover:bg-line/[0.08] hover:text-ink transition"
-              aria-label="Закрыть"
+              aria-label="Close"
             >
               <X size={18} />
             </Dialog.Close>

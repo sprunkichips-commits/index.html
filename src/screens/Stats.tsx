@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, MousePointerClick } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
-import { computeStats, MONTHS, MS, type TxType } from '@/lib/data'
+import { catLabel, computeStats, MONTHS, MS, typeLabel, type TxType } from '@/lib/data'
 import { rub } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
@@ -104,19 +104,19 @@ export function Stats() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, view, cursor.m, cursor.y, data.transactions.length])
 
-  const word = view === 'Доход' ? 'Доход' : 'Расход'
+  const word = typeLabel(view)
   const selBar = bars[sel]
   const selLabel =
     mode === 'months'
       ? `${word} · ${MONTHS[sel] ?? ''} ${cursor.y}`
       : mode === 'days'
-        ? `${word} · ${selBar?.label ?? ''} ${MS[cursor.m]}`
+        ? `${word} · ${MS[cursor.m]} ${selBar?.label ?? ''}`
         : mode === 'years'
-          ? `${word} · ${selBar?.label ?? ''} год`
-          : `${word} · дни ${selBar?.label ?? ''}`
+          ? `${word} · ${selBar?.label ?? ''}`
+          : `${word} · days ${selBar?.label ?? ''}`
 
-  const catTitle = view === 'Доход' ? 'Источники дохода' : 'Куда уходят деньги'
-  const shareWord = view === 'Доход' ? 'доходов' : 'расходов'
+  const catTitle = view === 'Доход' ? 'Income sources' : 'Where money goes'
+  const shareWord = view === 'Доход' ? 'income' : 'expenses'
 
   return (
     <div className="flex flex-col gap-5">
@@ -125,8 +125,8 @@ export function Stats() {
           value={view}
           onChange={(v) => setView(v)}
           options={[
-            { value: 'Доход' as TxType, label: 'Доходы' },
-            { value: 'Расход' as TxType, label: 'Расходы' },
+            { value: 'Доход' as TxType, label: 'Income' },
+            { value: 'Расход' as TxType, label: 'Expense' },
           ]}
           className="mb-3"
         />
@@ -134,10 +134,10 @@ export function Stats() {
           value={mode}
           onChange={(m) => setMode(m)}
           options={[
-            { value: 'days' as Mode, label: 'Дни' },
-            { value: 'weeks' as Mode, label: 'Недели' },
-            { value: 'months' as Mode, label: 'Месяцы' },
-            { value: 'years' as Mode, label: 'Годы' },
+            { value: 'days' as Mode, label: 'Days' },
+            { value: 'weeks' as Mode, label: 'Weeks' },
+            { value: 'months' as Mode, label: 'Months' },
+            { value: 'years' as Mode, label: 'Years' },
           ]}
           className="mb-4"
         />
@@ -148,19 +148,19 @@ export function Stats() {
           <BarStat data={bars} selected={sel} onSelect={setSel} />
         </div>
         <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-faint">
-          <MousePointerClick size={13} /> нажми на столбец, чтобы выбрать период
+          <MousePointerClick size={13} /> tap a bar to pick a period
         </div>
       </Card>
 
       <Card className="p-4">
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-semibold">Доходы и расходы по месяцам</div>
+          <div className="text-sm font-semibold">Income & expenses by month</div>
           <div className="flex gap-3 text-[11px] text-sub">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-pos" /> доход
+              <span className="h-2 w-2 rounded-full bg-pos" /> income
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-neg" /> расход
+              <span className="h-2 w-2 rounded-full bg-neg" /> expense
             </span>
           </div>
         </div>
@@ -171,7 +171,7 @@ export function Stats() {
         <div className="mb-2 text-sm font-semibold">{catTitle}</div>
         {agg.cats.length === 0 ? (
           <div className="py-8 text-center text-[13px] text-faint">
-            {view === 'Доход' ? 'В этом месяце доходов нет' : 'В этом месяце трат нет'}
+            {view === 'Доход' ? 'No income this month' : 'No expenses this month'}
           </div>
         ) : (
           <div className="flex flex-col">
@@ -189,9 +189,9 @@ export function Stats() {
                     <CategoryIcon category={c.name} />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{c.name}</div>
+                    <div className="truncate text-sm font-medium">{catLabel(c.name)}</div>
                     <div className="text-xs text-faint">
-                      {Math.round(share)}% от {shareWord}
+                      {Math.round(share)}% of {shareWord}
                     </div>
                   </div>
                   <div className="text-right">
@@ -207,7 +207,7 @@ export function Stats() {
                         {Math.abs(Math.round(c.delta))}%
                       </div>
                     ) : (
-                      <div className="text-xs text-faint">новое</div>
+                      <div className="text-xs text-faint">new</div>
                     )}
                   </div>
                 </div>

@@ -9,12 +9,14 @@ export function Select({
   placeholder,
   options,
   ariaLabel,
+  labelFor,
 }: {
   value: string
   onValueChange: (v: string) => void
   placeholder?: string
   options: string[]
   ariaLabel?: string
+  labelFor?: (v: string) => string
 }) {
   return (
     <RS.Root value={value || undefined} onValueChange={onValueChange}>
@@ -46,7 +48,7 @@ export function Select({
                   'data-[highlighted]:bg-accent/15 data-[highlighted]:text-ink',
                 )}
               >
-                <RS.ItemText>{opt}</RS.ItemText>
+                <RS.ItemText>{labelFor ? labelFor(opt) : opt}</RS.ItemText>
                 <RS.ItemIndicator className="absolute right-2">
                   <Check size={15} className="text-accent" />
                 </RS.ItemIndicator>
