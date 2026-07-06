@@ -30,8 +30,6 @@ export const TITLE_MAX = 80
 export const MAX_GOALS = 30
 export const MAX_TASKS = 30
 export const MAX_LOG_DAYS = 800
-export const PIN_MIN = 4
-export const PIN_MAX = 32
 
 export function emptyGoals(): GoalsData {
   return { goals: [], tasks: [], logs: {} }
@@ -180,8 +178,14 @@ export function parseGoals(obj: unknown): GoalsData {
 
   const logs: Record<string, DayLog> = {}
   if (o.logs && typeof o.logs === 'object') {
-    for (const [k, v] of Object.entries(o.logs as Record<string, unknown>).slice(0, MAX_LOG_DAYS)) {
-      if (!validDate(k) || !v || typeof v !== 'object') continue
+    // При переполнении истории оставляем САМЫЕ НОВЫЕ дни (сортировка по дате),
+    // а не первые попавшиеся — иначе можно молча потерять свежие отметки.
+    const entries = Object.entries(o.logs as Record<string, unknown>)
+      .filter(([k]) => validDate(k))
+      .sort(([a], [b]) => (a < b ? 1 : -1))
+      .slice(0, MAX_LOG_DAYS)
+    for (const [k, v] of entries) {
+      if (!v || typeof v !== 'object') continue
       const lv = v as Record<string, unknown>
       const done = Array.isArray(lv.done)
         ? (lv.done as unknown[]).filter((x) => typeof x === 'string').map((x) => (x as string).slice(0, 32)).slice(0, MAX_TASKS)
@@ -193,8 +197,4 @@ export function parseGoals(obj: unknown): GoalsData {
   }
 
   return { goals, tasks, logs }
-}
-
-export function validPin(pin: string): boolean {
-  return typeof pin === 'string' && pin.length >= PIN_MIN && pin.length <= PIN_MAX
 }

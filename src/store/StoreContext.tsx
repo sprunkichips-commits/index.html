@@ -31,11 +31,12 @@ import {
   TYPE_MAX,
   DEMO,
 } from '@/lib/data'
-import { KEY, PKEY, TKEY, bigGet, bigSet, cloudGet, cloudSet, sget, sset } from '@/lib/storage'
+import { CSKEY, KEY, PKEY, TKEY, bigGet, bigSet, cloudGet, cloudSet, sget, sset } from '@/lib/storage'
 import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
-import { today } from '@/lib/format'
 
 export type Theme = 'dark' | 'light'
+/** Стиль графиков статистики: classic — столбцы, studio — линия (как в YouTube Studio). */
+export type ChartStyle = 'classic' | 'studio'
 export type Tab = 'dash' | 'tx' | 'stats' | 'goals'
 export type Filter = 'Все' | 'Доход' | 'Расход'
 
@@ -58,6 +59,7 @@ interface AddInvInput {
 interface Store {
   data: AppData
   theme: Theme
+  chartStyle: ChartStyle
   cursor: Cursor
   tab: Tab
   filter: Filter
@@ -70,6 +72,7 @@ interface Store {
   shiftMonth: (delta: number) => void
   toggleTheme: () => void
   setTheme: (t: Theme) => void
+  setChartStyle: (s: ChartStyle) => void
   setProfile: (p: Profile) => void
   addTx: (input: AddTxInput) => boolean
   delTx: (id: string) => void
@@ -78,8 +81,6 @@ interface Store {
   restore: (obj: unknown) => void
   loadDemo: () => void
   clearAll: () => void
-  download: () => void
-  copy: () => void
   toast: (m: string) => void
 }
 
@@ -101,23 +102,45 @@ function applyTheme(t: Theme) {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(() => parseStored(sget(KEY)) || emptyData())
   const [theme, setThemeState] = useState<Theme>(() => (sget(TKEY) === 'light' ? 'light' : 'dark'))
+  const [chartStyle, setChartStyleState] = useState<ChartStyle>(() =>
+    sget(CSKEY) === 'studio' ? 'studio' : 'classic',
+  )
   const [cursor, setCursor] = useState<Cursor>(() => cursorFromData(parseStored(sget(KEY)) || emptyData()))
   const [tab, setTab] = useState<Tab>('dash')
   const [filter, setFilter] = useState<Filter>('Все')
   const [notice, setNotice] = useState<string | null>(null)
   const [profile, setProfileState] = useState<Profile>(() => parseProfile(sget(PKEY)))
   const toastTimer = useRef<number | null>(null)
+  // Пользователь уже менял данные/профиль в этой сессии? Тогда поздняя
+  // гидратация из облака НЕ должна затирать его правки (см. boot-эффект).
+  const dataDirty = useRef(false)
+  const profileDirty = useRef(false)
 
   const firstName = tgUser?.first_name?.trim() || ''
   const displayName = profile.name || firstName || 'Guest'
 
-  // Persist helper — localStorage зеркало + CloudStorage (как в исходнике).
-  const persist = useCallback((next: AppData) => {
-    setData(next)
-    const str = JSON.stringify(next)
-    sset(KEY, str)
-    if (hasCloud) bigSet('data', str)
+  const toast = useCallback((m: string) => {
+    setNotice(m)
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setNotice(null), 1900)
   }, [])
+
+  // Persist helper — localStorage зеркало + CloudStorage. О сбое облачной
+  // записи предупреждаем: данные целы локально, но на другом устройстве их нет.
+  const persist = useCallback(
+    (next: AppData) => {
+      dataDirty.current = true
+      setData(next)
+      const str = JSON.stringify(next)
+      sset(KEY, str)
+      if (hasCloud) {
+        void bigSet('data', str).then((ok) => {
+          if (!ok) toast('Saved on device; Telegram sync failed')
+        })
+      }
+    },
+    [toast],
+  )
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t)
@@ -130,20 +153,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTheme(theme === 'dark' ? 'light' : 'dark')
   }, [theme, setTheme])
 
-  // Профиль (ник + аватар): нормализуем, зеркалим в localStorage и в облако.
-  const setProfile = useCallback((p: Profile) => {
-    const next: Profile = { name: clampStr(p.name, NAME_MAX).trim(), avatar: cleanAvatar(p.avatar) }
-    setProfileState(next)
-    const str = JSON.stringify(next)
-    sset(PKEY, str)
-    if (hasCloud) bigSet('profile', str)
+  const setChartStyle = useCallback((s: ChartStyle) => {
+    setChartStyleState(s)
+    sset(CSKEY, s)
+    if (hasCloud) cloudSet('chartstyle', s)
   }, [])
 
-  const toast = useCallback((m: string) => {
-    setNotice(m)
-    if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setNotice(null), 1900)
-  }, [])
+  // Профиль (ник + аватар): нормализуем, зеркалим в localStorage и в облако.
+  const setProfile = useCallback(
+    (p: Profile) => {
+      profileDirty.current = true
+      const next: Profile = { name: clampStr(p.name, NAME_MAX).trim(), avatar: cleanAvatar(p.avatar) }
+      setProfileState(next)
+      const str = JSON.stringify(next)
+      sset(PKEY, str)
+      if (hasCloud) {
+        void bigSet('profile', str).then((ok) => {
+          if (!ok) toast('Saved on device; Telegram sync failed')
+        })
+      }
+    },
+    [toast],
+  )
 
   const shiftMonth = useCallback((delta: number) => {
     setCursor((c) => {
@@ -230,35 +261,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast('Cleared')
   }, [persist, toast])
 
-  const download = useCallback(() => {
-    try {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'dengi-backup-' + today() + '.json'
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      toast('File downloaded')
-    } catch {
-      toast('Could not download')
-    }
-  }, [data, toast])
-
-  const copy = useCallback(() => {
-    const str = JSON.stringify(data)
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(str).then(
-        () => toast('Copied'),
-        () => toast('Could not copy'),
-      )
-    } else {
-      toast('Clipboard unavailable')
-    }
-  }, [data, toast])
-
   // ----- Старт: тема + Telegram + гидратация из CloudStorage -----
   const booted = useRef(false)
   useEffect(() => {
@@ -267,32 +269,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     applyTheme(theme)
     tgReady()
     if (!hasCloud) return
-    Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile')]).then(([dataStr, th, profStr]) => {
-      if ((th === 'light' || th === 'dark') && th !== theme) {
-        setThemeState(th)
-        applyTheme(th)
-      }
-      if (dataStr) {
-        const parsed = parseStored(dataStr) // raw, без sanitize — обратная совместимость
-        if (parsed) {
-          setData(parsed)
-          sset(KEY, dataStr)
-          setCursor(cursorFromData(parsed))
+    Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile'), cloudGet('chartstyle')]).then(
+      ([dataStr, th, profStr, cs]) => {
+        if ((th === 'light' || th === 'dark') && th !== theme) {
+          setThemeState(th)
+          applyTheme(th)
         }
-      } else if (data.transactions.length || data.investments.length) {
-        // нет облачных данных, но есть локальные — поднимаем в облако (как в исходнике)
-        bigSet('data', JSON.stringify(data))
-        cloudSet('theme', theme)
-      }
-      if (profStr) {
-        const p = parseProfile(profStr)
-        setProfileState(p)
-        sset(PKEY, JSON.stringify(p))
-      } else if (profile.name || profile.avatar) {
-        // нет облачного профиля, но есть локальный — поднимаем в облако
-        bigSet('profile', JSON.stringify(profile))
-      }
-    })
+        if (cs === 'classic' || cs === 'studio') {
+          setChartStyleState(cs)
+          sset(CSKEY, cs)
+        }
+        // Если пользователь уже успел что-то изменить, пока грузилось облако, —
+        // его правки главнее: они уже записаны и локально, и в облако.
+        if (dataStr && !dataDirty.current) {
+          const parsed = parseStored(dataStr) // raw, без sanitize — обратная совместимость
+          if (parsed) {
+            setData(parsed)
+            sset(KEY, dataStr)
+            setCursor(cursorFromData(parsed))
+          }
+        } else if (!dataStr && (data.transactions.length || data.investments.length)) {
+          // нет облачных данных, но есть локальные — поднимаем в облако (как в исходнике)
+          void bigSet('data', JSON.stringify(data))
+          cloudSet('theme', theme)
+        }
+        if (profStr && !profileDirty.current) {
+          const p = parseProfile(profStr)
+          setProfileState(p)
+          sset(PKEY, JSON.stringify(p))
+        } else if (!profStr && (profile.name || profile.avatar)) {
+          // нет облачного профиля, но есть локальный — поднимаем в облако
+          void bigSet('profile', JSON.stringify(profile))
+        }
+      },
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -300,6 +310,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () => ({
       data,
       theme,
+      chartStyle,
       cursor,
       tab,
       filter,
@@ -312,6 +323,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       shiftMonth,
       toggleTheme,
       setTheme,
+      setChartStyle,
       setProfile,
       addTx,
       delTx,
@@ -320,14 +332,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       restore,
       loadDemo,
       clearAll,
-      download,
-      copy,
       toast,
     }),
     [
-      data, theme, cursor, tab, filter, notice, firstName, profile, displayName,
-      shiftMonth, toggleTheme, setTheme, setProfile, addTx, delTx, addInv, delInv,
-      restore, loadDemo, clearAll, download, copy, toast,
+      data, theme, chartStyle, cursor, tab, filter, notice, firstName, profile, displayName,
+      shiftMonth, toggleTheme, setTheme, setChartStyle, setProfile, addTx, delTx, addInv, delInv,
+      restore, loadDemo, clearAll, toast,
     ],
   )
 

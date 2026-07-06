@@ -1,20 +1,65 @@
 import { useRef, useState } from 'react'
-import { Copy, Download, Moon, Sun, Trash2, Upload } from 'lucide-react'
+import { BarChart3, Copy, Download, Moon, Sun, TrendingUp, Trash2, Upload } from 'lucide-react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
 import { Textarea } from './ui/input'
 import { useStore } from '@/store/StoreContext'
+import { useGoals } from '@/store/GoalsContext'
 import { hasCloud, tgUserId } from '@/lib/telegram'
+import { today } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { theme, setTheme, download, copy, restore, loadDemo, clearAll, toast } = useStore()
+  const { data, theme, setTheme, chartStyle, setChartStyle, restore, loadDemo, clearAll, toast } = useStore()
+  const goals = useGoals()
   const [text, setText] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Бэкап включает и финансы, и цели — один файл спасает всё.
+  // Старые файлы (без ключа goals) восстанавливаются как раньше.
+  function exportStr(pretty: boolean): string {
+    const full = { ...data, goals: goals.data }
+    return JSON.stringify(full, null, pretty ? 2 : undefined)
+  }
+
+  function restoreAll(obj: unknown) {
+    restore(obj) // финансы (строгий sanitize внутри)
+    if (obj && typeof obj === 'object' && 'goals' in obj) {
+      goals.restoreGoals((obj as { goals: unknown }).goals)
+    }
+  }
+
+  function download() {
+    try {
+      const blob = new Blob([exportStr(true)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'dengi-backup-' + today() + '.json'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast('File downloaded')
+    } catch {
+      toast('Could not download')
+    }
+  }
+
+  function copy() {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(exportStr(false)).then(
+        () => toast('Copied'),
+        () => toast('Could not copy'),
+      )
+    } else {
+      toast('Clipboard unavailable')
+    }
+  }
+
   function restoreFromText() {
     try {
-      restore(JSON.parse(text || 'null'))
+      restoreAll(JSON.parse(text || 'null'))
       onOpenChange(false)
     } catch {
       toast('Could not read')
@@ -27,7 +72,7 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     const r = new FileReader()
     r.onload = () => {
       try {
-        restore(JSON.parse(String(r.result)))
+        restoreAll(JSON.parse(String(r.result)))
         onOpenChange(false)
       } catch {
         toast('Invalid file')
@@ -54,6 +99,22 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           onClick={() => setTheme('dark')}
         >
           <Moon size={15} /> Dark
+        </Button>
+      </div>
+
+      <div className={cn(cap, 'mb-2')}>Chart style</div>
+      <div className="mb-5 grid grid-cols-2 gap-2">
+        <Button
+          variant={chartStyle === 'classic' ? 'accent' : 'soft'}
+          onClick={() => setChartStyle('classic')}
+        >
+          <BarChart3 size={15} /> Classic
+        </Button>
+        <Button
+          variant={chartStyle === 'studio' ? 'accent' : 'soft'}
+          onClick={() => setChartStyle('studio')}
+        >
+          <TrendingUp size={15} /> Studio
         </Button>
       </div>
 

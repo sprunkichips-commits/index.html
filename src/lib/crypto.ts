@@ -29,10 +29,6 @@ function b64ToBuf(b64: string): Uint8Array<ArrayBuffer> {
   return out
 }
 
-export function randomSaltB64(): string {
-  return bufToB64(crypto.getRandomValues(new Uint8Array(16)).buffer)
-}
-
 // Постоянная соль приложения (не секрет). Секретность ключа держится на
 // идентификаторе пользователя Telegram (у каждого свой), а не на этой строке.
 const STATIC_SALT_B64 = 'Z29hbHMtc2FsdC0wMDAwMQ=='

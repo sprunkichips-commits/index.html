@@ -6,7 +6,8 @@ import { TG } from './telegram'
 export const KEY = 'pm-finance-v1' // localStorage: данные
 export const TKEY = 'pm-finance-theme-v1' // localStorage: тема
 export const PKEY = 'pm-finance-profile-v1' // localStorage: профиль (ник + аватар)
-export const GKEY = 'pm-goals-v1' // localStorage: цели (может быть зашифровано PIN-ом)
+export const GKEY = 'pm-goals-v1' // localStorage: цели (шифруются автоключом)
+export const CSKEY = 'pm-finance-chartstyle-v1' // localStorage: стиль графиков (classic | studio)
 // CloudStorage: данные в чанках под именем "data" (data_0…/data_n), тема в "theme",
 // профиль в чанках под именем "profile" (аватар не влезает в один ключ 4096).
 
@@ -43,23 +44,29 @@ export function cloudRem(ks: string[]): Promise<boolean> {
   })
 }
 
-export function bigSet(name: string, str: string): Promise<void> {
+/**
+ * Запись больших значений чанками. Возвращает true только если ВСЕ чанки и
+ * счётчик записались — иначе false, чтобы вызывающий мог предупредить о
+ * несинхронизированных данных (счётчик _n пишем последним: старая версия
+ * останется целостной, если часть чанков не записалась).
+ */
+export function bigSet(name: string, str: string): Promise<boolean> {
   const n = Math.max(1, Math.ceil(str.length / CHUNK))
   const ops: Promise<boolean>[] = []
   for (let i = 0; i < n; i++) ops.push(cloudSet(name + '_' + i, str.slice(i * CHUNK, (i + 1) * CHUNK)))
   return Promise.all(ops)
-    .then(() => cloudSet(name + '_n', String(n)))
-    .then(() => {
+    .then((oks) => (oks.every(Boolean) ? cloudSet(name + '_n', String(n)) : false))
+    .then((ok) => {
+      if (!ok) return false
       const pn = prevN[name] || 0
+      prevN[name] = n
       if (pn > n) {
         const rm: string[] = []
         for (let j = n; j < pn; j++) rm.push(name + '_' + j)
-        if (rm.length) return cloudRem(rm).then(() => undefined)
+        // Уборка хвостов — не влияет на целостность, ошибку не считаем фатальной.
+        if (rm.length) return cloudRem(rm).then(() => true)
       }
-      return undefined
-    })
-    .then(() => {
-      prevN[name] = n
+      return true
     })
 }
 

@@ -68,18 +68,16 @@ export function Goals() {
   const total = g.data.tasks.length
   const todayPct = percentForDay(todayLog ? { done: todayLog.done, total } : undefined)
 
-  // Диапазон графика: пресеты «последние N дней до сегодня» (не раньше первой
-  // записи — незачем рисовать пустой хвост), кастом — как выбрал пользователь.
+  // Диапазон графика: пресеты — всегда ровно последние N дней до сегодня
+  // (как в YouTube Studio), кастом — как выбрал пользователь. Дни без записей
+  // рисуются нулями — переключение периода всегда меняет окно.
   const range = useMemo(() => {
     if (period === 'custom') {
       return { from: custom.from, to: custom.to > g.todayKey ? g.todayKey : custom.to }
     }
     const n = Number(period)
-    let from = shiftDate(g.todayKey, -(n - 1))
-    const keys = Object.keys(g.data.logs).sort()
-    if (keys.length && keys[0] > from) from = keys[0]
-    return { from, to: g.todayKey }
-  }, [period, custom, g.todayKey, g.data.logs])
+    return { from: shiftDate(g.todayKey, -(n - 1)), to: g.todayKey }
+  }, [period, custom, g.todayKey])
 
   const trend = useMemo(() => rangeSeries(g.data.logs, range.from, range.to), [g.data.logs, range])
   const stats = useMemo(

@@ -6,6 +6,7 @@ import { rub } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
 import { BarStat, type BarPoint } from '@/components/charts/BarStat'
+import { StudioLine } from '@/components/charts/StudioLine'
 import { GroupedMonths } from '@/components/charts/GroupedMonths'
 import { CategoryIcon } from '@/components/CategoryIcon'
 import { cn } from '@/lib/utils'
@@ -19,7 +20,7 @@ interface CatRow {
 }
 
 export function Stats() {
-  const { data, cursor } = useStore()
+  const { data, cursor, chartStyle } = useStore()
   const D = useMemo(() => computeStats(data, cursor), [data, cursor])
   const [view, setView] = useState<TxType>('Расход')
   const [mode, setMode] = useState<Mode>('months')
@@ -145,10 +146,14 @@ export function Stats() {
         <div className="mono mt-1 text-3xl font-bold">{rub(selBar?.value || 0)}</div>
 
         <div className="mt-3">
-          <BarStat data={bars} selected={sel} onSelect={setSel} />
+          {chartStyle === 'studio' ? (
+            <StudioLine data={bars} selected={sel} onSelect={setSel} />
+          ) : (
+            <BarStat data={bars} selected={sel} onSelect={setSel} />
+          )}
         </div>
         <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-faint">
-          <MousePointerClick size={13} /> tap a bar to pick a period
+          <MousePointerClick size={13} /> {chartStyle === 'studio' ? 'tap the chart to pick a period' : 'tap a bar to pick a period'}
         </div>
       </Card>
 
