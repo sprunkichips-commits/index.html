@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, Check, Flame, Pencil, Plus, Target, Trash2 } from 'lucide-react'
+import { CalendarClock, Check, Flame, Pencil, Plus, Target, Trash2, X } from 'lucide-react'
 import { useGoals } from '@/store/GoalsContext'
-import { type DailyTask, type Goal, daysLeft, localDateStr, percentForDay, trendSeries } from '@/lib/goals'
+import {
+  type DailyTask,
+  type Goal,
+  RANGE_MAX_DAYS,
+  daysLeft,
+  localDateStr,
+  percentForDay,
+  rangeSeries,
+  shiftDate,
+  taskStats,
+} from '@/lib/goals'
 import { fmtDateLong } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Segmented } from '@/components/ui/segmented'
 import { Sheet } from '@/components/ui/sheet'
 import { TrendLine } from '@/components/charts/TrendLine'
 import { cn } from '@/lib/utils'
@@ -27,16 +38,62 @@ function defaultTarget(): string {
   return localDateStr(d)
 }
 
+type Period = '7' | '14' | '28' | 'custom'
+
+const PERIODS: { value: Period; label: string }[] = [
+  { value: '7', label: '7d' },
+  { value: '14', label: '14d' },
+  { value: '28', label: '28d' },
+  { value: 'custom', label: 'Custom' },
+]
+
+const DT_SHORT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+
+function fmtShort(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return isNaN(d.getTime()) ? dateStr : DT_SHORT.format(d)
+}
+
 export function Goals() {
   const g = useGoals()
   const [goalSheet, setGoalSheet] = useState<{ open: boolean; goal: Goal | null }>({ open: false, goal: null })
   const [tasksOpen, setTasksOpen] = useState(false)
+  const [period, setPeriod] = useState<Period>('7')
+  const [custom, setCustom] = useState(() => ({ from: shiftDate(localDateStr(), -27), to: localDateStr() }))
+  const [rangeOpen, setRangeOpen] = useState(false)
+  const [selDay, setSelDay] = useState(g.todayKey)
 
   const todayLog = g.data.logs[g.todayKey]
   const doneCount = todayLog?.done.length || 0
   const total = g.data.tasks.length
   const todayPct = percentForDay(todayLog ? { done: todayLog.done, total } : undefined)
-  const trend = useMemo(() => trendSeries(g.data.logs, g.todayKey, 30), [g.data.logs, g.todayKey])
+
+  // Диапазон графика: пресеты «последние N дней до сегодня» (не раньше первой
+  // записи — незачем рисовать пустой хвост), кастом — как выбрал пользователь.
+  const range = useMemo(() => {
+    if (period === 'custom') {
+      return { from: custom.from, to: custom.to > g.todayKey ? g.todayKey : custom.to }
+    }
+    const n = Number(period)
+    let from = shiftDate(g.todayKey, -(n - 1))
+    const keys = Object.keys(g.data.logs).sort()
+    if (keys.length && keys[0] > from) from = keys[0]
+    return { from, to: g.todayKey }
+  }, [period, custom, g.todayKey, g.data.logs])
+
+  const trend = useMemo(() => rangeSeries(g.data.logs, range.from, range.to), [g.data.logs, range])
+  const stats = useMemo(
+    () => taskStats(g.data.logs, g.data.tasks, range.from, range.to),
+    [g.data.logs, g.data.tasks, range],
+  )
+
+  // Выбранный день всегда внутри диапазона; по умолчанию — последний (сегодня).
+  useEffect(() => {
+    if (trend.length && !trend.some((p) => p.date === selDay)) setSelDay(trend[trend.length - 1].date)
+  }, [trend, selDay])
+
+  const selLog = g.data.logs[selDay]
+  const selDone = g.data.tasks.filter((t) => !!selLog?.done.includes(t.id)).length
 
   if (g.status === 'loading') {
     return <div className="py-16 text-center text-sm text-faint">Loading…</div>
@@ -169,15 +226,92 @@ export function Goals() {
         )}
       </Card>
 
-      {/* График выполнения */}
+      {/* График выполнения: период → линия → детали дня → разбивка по задачам */}
       <Card className="p-4">
         <div className="mb-2 text-sm font-semibold">Daily completion</div>
-        {trend.length === 0 ? (
+        <Segmented
+          value={period}
+          onChange={(v) => (v === 'custom' ? setRangeOpen(true) : setPeriod(v))}
+          options={PERIODS}
+          className="mb-1"
+        />
+        {period === 'custom' && (
+          <div className="mb-1 mt-1 text-center text-[11px] text-faint">
+            {fmtShort(range.from)} – {fmtShort(range.to)}
+          </div>
+        )}
+        {Object.keys(g.data.logs).length === 0 ? (
           <div className="py-8 text-center text-[13px] text-faint">
             Check tasks each evening — your % trend will show up here.
           </div>
+        ) : trend.length === 0 ? (
+          <div className="py-8 text-center text-[13px] text-faint">No days in this range.</div>
         ) : (
-          <TrendLine data={trend} />
+          <>
+            <div className="mt-2">
+              <TrendLine data={trend} selected={selDay} onSelect={setSelDay} />
+            </div>
+
+            {/* Что сделано в выбранный день (тап по графику) */}
+            {total > 0 && trend.some((p) => p.date === selDay) && (
+              <div className="mt-3 border-t border-line/8 pt-3">
+                <div className="flex items-baseline justify-between">
+                  <div className="text-[13px] font-semibold">{fmtDateLong(selDay)}</div>
+                  <div className="text-xs text-faint">
+                    {selDone} of {total} · {total ? Math.round((selDone / total) * 100) : 0}%
+                  </div>
+                </div>
+                <div className="mt-1.5 flex flex-col">
+                  {g.data.tasks.map((task) => {
+                    const done = !!selLog?.done.includes(task.id)
+                    return (
+                      <div key={task.id} className="flex items-center gap-2.5 py-1.5">
+                        <span
+                          className={cn(
+                            'grid h-5 w-5 flex-none place-items-center rounded-md border',
+                            done ? 'border-accent bg-accent text-accent-ink' : 'border-line/20 text-faint',
+                          )}
+                        >
+                          {done ? <Check size={13} /> : <X size={12} />}
+                        </span>
+                        <span className={cn('min-w-0 flex-1 truncate text-[13px]', done ? 'text-ink' : 'text-faint')}>
+                          {task.title}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Разбивка по задачам за период: что делаю чаще, что реже */}
+            {stats.length > 0 && (
+              <div className="mt-3 border-t border-line/8 pt-3">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <div className="text-[13px] font-semibold">By task</div>
+                  <div className="text-[11px] text-faint">% of days done</div>
+                </div>
+                <div className="flex flex-col gap-2.5">
+                  {stats.map((s) => (
+                    <div key={s.id}>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate text-[13px]">{s.title}</span>
+                        <span className="flex flex-none items-baseline gap-1.5">
+                          <span className="text-[11px] text-faint">
+                            {s.doneDays}/{s.days}
+                          </span>
+                          <span className="mono w-9 text-right text-[13px] font-bold">{s.pct}%</span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-line/10">
+                        <div className="h-full rounded-full bg-accent" style={{ width: `${s.pct}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
@@ -198,7 +332,78 @@ export function Goals() {
         onClose={() => setGoalSheet({ open: false, goal: null })}
       />
       <TasksSheet open={tasksOpen} onClose={() => setTasksOpen(false)} />
+      <RangeSheet
+        open={rangeOpen}
+        from={custom.from}
+        to={custom.to}
+        todayKey={g.todayKey}
+        onApply={(from, to) => {
+          setCustom({ from, to })
+          setPeriod('custom')
+          setRangeOpen(false)
+        }}
+        onClose={() => setRangeOpen(false)}
+      />
     </div>
+  )
+}
+
+// ---------- Лист: кастомный период (как в YouTube Studio) ----------
+function RangeSheet({
+  open,
+  from,
+  to,
+  todayKey,
+  onApply,
+  onClose,
+}: {
+  open: boolean
+  from: string
+  to: string
+  todayKey: string
+  onApply: (from: string, to: string) => void
+  onClose: () => void
+}) {
+  const [f, setF] = useState(from)
+  const [t, setT] = useState(to)
+
+  useEffect(() => {
+    if (open) {
+      setF(from)
+      setT(to)
+    }
+  }, [open, from, to])
+
+  const spanDays = f && t && f <= t ? daysLeft(t, f) + 1 : 0
+  const err =
+    !f || !t
+      ? 'Pick both dates'
+      : f > t
+        ? 'Start date is after end date'
+        : f > todayKey
+          ? 'Start date is in the future'
+          : spanDays > RANGE_MAX_DAYS
+            ? `Max range is ${RANGE_MAX_DAYS} days`
+            : null
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()} title="Custom range">
+      <label className="mb-1.5 block text-xs font-medium text-sub">From</label>
+      <Input type="date" value={f} max={todayKey} onChange={(e) => setF(e.target.value)} className="mb-3" />
+      <label className="mb-1.5 block text-xs font-medium text-sub">To</label>
+      <Input type="date" value={t} max={todayKey} onChange={(e) => setT(e.target.value)} className="mb-2" />
+      <div className={cn('mb-4 min-h-[18px] text-xs', err ? 'text-neg' : 'text-faint')}>
+        {err || `${spanDays} ${dayWord(spanDays)}`}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="accent" disabled={!!err} onClick={() => onApply(f, t > todayKey ? todayKey : t)}>
+          Apply
+        </Button>
+      </div>
+    </Sheet>
   )
 }
 

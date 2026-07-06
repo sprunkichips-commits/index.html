@@ -81,25 +81,65 @@ export function computeStreak(logs: Record<string, DayLog>, todayStr: string = l
   return n
 }
 
-/** Точки для линейного графика: процент закрытия по дням (окно до maxDays). */
-export function trendSeries(
-  logs: Record<string, DayLog>,
-  todayStr: string = localDateStr(),
-  maxDays = 30,
-): { label: string; percent: number; date: string }[] {
-  const keys = Object.keys(logs).sort()
-  if (keys.length === 0) return []
-  const today = new Date(todayStr + 'T00:00:00')
-  const earliest = new Date(keys[0] + 'T00:00:00')
-  const windowStart = new Date(today)
-  windowStart.setDate(today.getDate() - (maxDays - 1))
-  const start = earliest > windowStart ? earliest : windowStart
-  const out: { label: string; percent: number; date: string }[] = []
-  for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+/** Сдвиг локальной даты на delta дней: ('2026-07-06', -6) → '2026-06-30'. */
+export function shiftDate(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  d.setDate(d.getDate() + delta)
+  return localDateStr(d)
+}
+
+export interface RangePoint {
+  date: string // YYYY-MM-DD
+  percent: number // 0…100
+}
+
+// Потолок точек графика — защита от абсурдного кастомного диапазона.
+export const RANGE_MAX_DAYS = 366
+
+/** Точки для графика: процент закрытия за каждый день диапазона (включительно).
+ *  Дни без записи — 0%, чтобы пропуски были видны, а не сглаживались. */
+export function rangeSeries(logs: Record<string, DayLog>, startStr: string, endStr: string): RangePoint[] {
+  if (!startStr || !endStr || startStr > endStr) return []
+  const out: RangePoint[] = []
+  const end = new Date(endStr + 'T00:00:00')
+  for (const d = new Date(startStr + 'T00:00:00'); d <= end && out.length < RANGE_MAX_DAYS; d.setDate(d.getDate() + 1)) {
     const key = localDateStr(d)
-    out.push({ label: String(d.getDate()), percent: percentForDay(logs[key]), date: key })
+    out.push({ date: key, percent: percentForDay(logs[key]) })
   }
   return out
+}
+
+export interface TaskStat {
+  id: string
+  title: string
+  doneDays: number
+  days: number
+  pct: number // 0…100 — доля дней диапазона, когда задача закрыта
+}
+
+/** Статистика по каждой текущей задаче за диапазон: в какие дни она закрывалась.
+ *  Отсортирована по убыванию — сразу видно, что делаю чаще, а что реже. */
+export function taskStats(
+  logs: Record<string, DayLog>,
+  tasks: DailyTask[],
+  startStr: string,
+  endStr: string,
+): TaskStat[] {
+  if (!tasks.length || !startStr || !endStr || startStr > endStr) return []
+  const doneBy: Record<string, number> = {}
+  let days = 0
+  const end = new Date(endStr + 'T00:00:00')
+  for (const d = new Date(startStr + 'T00:00:00'); d <= end && days < RANGE_MAX_DAYS; d.setDate(d.getDate() + 1)) {
+    days++
+    const log = logs[localDateStr(d)]
+    if (log) for (const id of log.done) doneBy[id] = (doneBy[id] || 0) + 1
+  }
+  return tasks
+    .map((t) => {
+      const doneDays = doneBy[t.id] || 0
+      return { id: t.id, title: t.title, doneDays, days, pct: days ? Math.round((doneDays / days) * 100) : 0 }
+    })
+    .sort((a, b) => b.pct - a.pct)
 }
 
 function cleanId(v: unknown): string {

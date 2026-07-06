@@ -8,6 +8,7 @@ export interface ChartColors {
   sub: string
   faint: string
   grid: string
+  bg: string
 }
 
 /** Читает CSS-переменные темы в конкретные цветовые строки для Recharts (SVG fill не понимает var()). */
@@ -24,6 +25,7 @@ export function useChartColors(themeKey: string): ChartColors {
       sub: v('--sub'),
       faint: v('--faint'),
       grid: va('--line', 0.1),
+      bg: v('--bg'),
     }
     // themeKey в зависимостях — пересчёт при смене темы
     // eslint-disable-next-line react-hooks/exhaustive-deps

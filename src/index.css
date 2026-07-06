@@ -136,5 +136,14 @@
 }
 .light .app-bg::after { opacity: 0; }
 
+/* Recharts v3 делает элементы графика фокусируемыми (в т.ч. внутренние <g>) —
+   убираем браузерную рамку фокуса при тапе: данные выбранного дня и так
+   дублируются панелью под графиком. */
+.recharts-wrapper,
+.recharts-wrapper :focus,
+.recharts-wrapper :focus-visible {
+  outline: none;
+}
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: hsl(var(--line) / 0.15); border-radius: 8px; }
