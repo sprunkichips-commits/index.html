@@ -50,24 +50,29 @@ export function cloudRem(ks: string[]): Promise<boolean> {
  * несинхронизированных данных (счётчик _n пишем последним: старая версия
  * останется целостной, если часть чанков не записалась).
  */
-export function bigSet(name: string, str: string): Promise<boolean> {
+export async function bigSet(name: string, str: string): Promise<boolean> {
   const n = Math.max(1, Math.ceil(str.length / CHUNK))
+  // Сколько чанков было раньше: из кэша сессии, иначе читаем старый счётчик.
+  // Без этого при уменьшении данных в новой сессии хвостовые чанки оставались
+  // в CloudStorage навсегда и потихоньку съедали лимит ключей Telegram (1024).
+  let pn = prevN[name] || 0
+  if (!pn) {
+    const ns = await cloudGet(name + '_n')
+    pn = (ns && parseInt(ns)) || 0
+  }
   const ops: Promise<boolean>[] = []
   for (let i = 0; i < n; i++) ops.push(cloudSet(name + '_' + i, str.slice(i * CHUNK, (i + 1) * CHUNK)))
-  return Promise.all(ops)
-    .then((oks) => (oks.every(Boolean) ? cloudSet(name + '_n', String(n)) : false))
-    .then((ok) => {
-      if (!ok) return false
-      const pn = prevN[name] || 0
-      prevN[name] = n
-      if (pn > n) {
-        const rm: string[] = []
-        for (let j = n; j < pn; j++) rm.push(name + '_' + j)
-        // Уборка хвостов — не влияет на целостность, ошибку не считаем фатальной.
-        if (rm.length) return cloudRem(rm).then(() => true)
-      }
-      return true
-    })
+  const oks = await Promise.all(ops)
+  if (!oks.every(Boolean)) return false
+  if (!(await cloudSet(name + '_n', String(n)))) return false
+  prevN[name] = n
+  if (pn > n) {
+    const rm: string[] = []
+    for (let j = n; j < pn; j++) rm.push(name + '_' + j)
+    // Уборка хвостов — не влияет на целостность, ошибку не считаем фатальной.
+    if (rm.length) await cloudRem(rm)
+  }
+  return true
 }
 
 export function bigGet(name: string): Promise<string | null> {
@@ -95,10 +100,49 @@ export function sget(k: string): string | null {
   }
 }
 
-export function sset(k: string, v: string): void {
+/**
+ * Запись в localStorage; false — место кончилось или доступ запрещён (значение
+ * удержится в памяти только до закрытия страницы — вызывающий должен предупредить).
+ */
+export function sset(k: string, v: string): boolean {
   try {
     localStorage.setItem(k, v)
+    return true
   } catch {
     mem[k] = v
+    return false
+  }
+}
+
+/**
+ * Ежедневный автоснимок: перед ПЕРВЫМ изменением за день откладывает текущее
+ * значение ключа в key+'-snap' ({d: дата, v: значение}). Даёт «вчерашнюю»
+ * копию для восстановления после случайной очистки/порчи. Только локально —
+ * ключи CloudStorage не тратим (основная облачная копия и так есть).
+ */
+export function dailySnapshot(key: string, todayStr: string): void {
+  try {
+    const cur = sget(key)
+    if (cur == null) return
+    const raw = sget(key + '-snap')
+    if (raw) {
+      const p = JSON.parse(raw) as { d?: string }
+      if (p?.d === todayStr) return // сегодня уже откладывали
+    }
+    sset(key + '-snap', JSON.stringify({ d: todayStr, v: cur }))
+  } catch {
+    /* снимок — best effort, основную запись не блокируем */
+  }
+}
+
+/** Читает автоснимок: дата и сохранённое значение, либо null. */
+export function readSnapshot(key: string): { d: string; v: string } | null {
+  try {
+    const raw = sget(key + '-snap')
+    if (!raw) return null
+    const p = JSON.parse(raw) as { d?: unknown; v?: unknown }
+    return typeof p?.d === 'string' && typeof p?.v === 'string' ? { d: p.d, v: p.v } : null
+  } catch {
+    return null
   }
 }

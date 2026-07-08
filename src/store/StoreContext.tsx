@@ -31,7 +31,11 @@ import {
   TYPE_MAX,
   DEMO,
 } from '@/lib/data'
-import { CSKEY, KEY, PKEY, TKEY, bigGet, bigSet, cloudGet, cloudSet, sget, sset } from '@/lib/storage'
+import {
+  CSKEY, KEY, PKEY, TKEY,
+  bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, sset,
+} from '@/lib/storage'
+import { localDateStr } from '@/lib/goals'
 import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 
 export type Theme = 'dark' | 'light'
@@ -79,6 +83,7 @@ interface Store {
   addInv: (input: AddInvInput) => boolean
   delInv: (id: string) => void
   restore: (obj: unknown) => void
+  restoreSnapshot: () => boolean
   loadDemo: () => void
   clearAll: () => void
   toast: (m: string) => void
@@ -125,18 +130,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toastTimer.current = window.setTimeout(() => setNotice(null), 1900)
   }, [])
 
-  // Persist helper — localStorage зеркало + CloudStorage. О сбое облачной
-  // записи предупреждаем: данные целы локально, но на другом устройстве их нет.
+  // Persist helper — localStorage зеркало + CloudStorage. Перед первой записью
+  // дня откладываем автоснимок «вчерашнего» состояния. О сбоях говорим вслух:
+  // облако не записалось — данные целы локально; локально не влезло и облака
+  // нет — данные живут только до закрытия, нужен бэкап.
   const persist = useCallback(
     (next: AppData) => {
       dataDirty.current = true
       setData(next)
+      dailySnapshot(KEY, localDateStr())
       const str = JSON.stringify(next)
-      sset(KEY, str)
+      const okLocal = sset(KEY, str)
       if (hasCloud) {
         void bigSet('data', str).then((ok) => {
           if (!ok) toast('Saved on device; Telegram sync failed')
         })
+      } else if (!okLocal) {
+        toast('Storage is full — download a backup now!')
       }
     },
     [toast],
@@ -251,6 +261,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [persist, toast],
   )
 
+  /** Откат финансов к автоснимку (состояние на начало дня снимка). */
+  const restoreSnapshot = useCallback((): boolean => {
+    const snap = readSnapshot(KEY)
+    const parsed = snap ? parseStored(snap.v) : null
+    if (!parsed) return false
+    setCursor(cursorFromData(parsed))
+    persist(parsed)
+    return true
+  }, [persist])
+
   const loadDemo = useCallback(() => {
     restore(DEMO)
   }, [restore])
@@ -268,6 +288,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     booted.current = true
     applyTheme(theme)
     tgReady()
+    // Запись есть, но JSON не читается (порча/обрыв записи)? Прячем копию в
+    // -bak: дальнейшие сохранения перезапишут KEY, а исходник останется.
+    const rawLocal = sget(KEY)
+    if (rawLocal && !parseStored(rawLocal)) {
+      sset(KEY + '-bak', rawLocal)
+      toast('Could not read saved data — backup kept')
+    }
     if (!hasCloud) return
     Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile'), cloudGet('chartstyle')]).then(
       ([dataStr, th, profStr, cs]) => {
@@ -330,6 +357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addInv,
       delInv,
       restore,
+      restoreSnapshot,
       loadDemo,
       clearAll,
       toast,
@@ -337,7 +365,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [
       data, theme, chartStyle, cursor, tab, filter, notice, firstName, profile, displayName,
       shiftMonth, toggleTheme, setTheme, setChartStyle, setProfile, addTx, delTx, addInv, delInv,
-      restore, loadDemo, clearAll, toast,
+      restore, restoreSnapshot, loadDemo, clearAll, toast,
     ],
   )
 

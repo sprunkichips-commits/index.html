@@ -173,7 +173,9 @@ export const NAME_MAX = 40
 export const TYPE_MAX = 24
 export const CAT_MAX = 40
 export const AMT_MAX = 1e12
-const MAX_TX = 5000
+// Потолки восстановления из бэкапа. 20 000 операций — это ~13 лет по 4 в день;
+// раньше было 5000 (могло молча отрезать историю многолетнего пользователя).
+const MAX_TX = 20_000
 const MAX_INV = 500
 // Разумный диапазон epoch-ms (2010…2100) — для валидации времени добавления.
 const MS_2010 = 1262304000000

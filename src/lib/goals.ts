@@ -29,7 +29,8 @@ export interface GoalsData {
 export const TITLE_MAX = 80
 export const MAX_GOALS = 30
 export const MAX_TASKS = 30
-export const MAX_LOG_DAYS = 800
+// ~5.5 лет ежедневных отметок; при переполнении сохраняются самые новые дни.
+export const MAX_LOG_DAYS = 2000
 
 export function emptyGoals(): GoalsData {
   return { goals: [], tasks: [], logs: {} }

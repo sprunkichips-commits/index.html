@@ -19,7 +19,7 @@ import {
   TITLE_MAX,
 } from '@/lib/goals'
 import { uid, validDate } from '@/lib/data'
-import { GKEY, bigGet, bigSet, sget, sset } from '@/lib/storage'
+import { GKEY, bigGet, bigSet, dailySnapshot, readSnapshot, sget, sset } from '@/lib/storage'
 import { hasCloud, tgUserId } from '@/lib/telegram'
 import { decryptJSON, deriveAutoKey, encryptJSON, hasCrypto } from '@/lib/crypto'
 import { useStore } from './StoreContext'
@@ -40,6 +40,7 @@ interface GoalsStore {
   delTask: (id: string) => void
   toggleToday: (taskId: string) => void
   restoreGoals: (obj: unknown) => void
+  restoreGoalsSnapshot: () => Promise<boolean>
   clearAllGoals: () => void
 }
 
@@ -91,6 +92,7 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
   const todayKey = localDateStr()
 
   // Сохранение: всегда шифруем (если доступен Web Crypto), иначе — открытым текстом.
+  // Перед первой записью дня — автоснимок «вчерашнего» конверта (см. dailySnapshot).
   const persist = useCallback(
     async (next: GoalsData) => {
       try {
@@ -100,9 +102,12 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         } else {
           env = JSON.stringify({ enc: 0, data: next })
         }
-        sset(GKEY, env)
-        if (hasCloud && !(await bigSet('goals', env))) {
-          toast('Saved on device; Telegram sync failed')
+        dailySnapshot(GKEY, localDateStr())
+        const okLocal = sset(GKEY, env)
+        if (hasCloud) {
+          if (!(await bigSet('goals', env))) toast('Saved on device; Telegram sync failed')
+        } else if (!okLocal) {
+          toast('Storage is full — download a backup now!')
         }
       } catch {
         toast('Could not save goals')
@@ -255,6 +260,16 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     [apply],
   )
 
+  /** Откат целей к автоснимку (конверт расшифровывается текущим ключом). */
+  const restoreGoalsSnapshot = useCallback(async (): Promise<boolean> => {
+    const snap = readSnapshot(GKEY)
+    if (!snap) return false
+    const loaded = await loadFrom(snap.v, keyRef.current)
+    if (loaded.failed) return false
+    apply(loaded.data)
+    return true
+  }, [apply])
+
   const clearAllGoals = useCallback(() => {
     apply(emptyGoals())
   }, [apply])
@@ -264,9 +279,13 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<GoalsStore>(
     () => ({
       status, data, encrypted, streak, todayKey,
-      addGoal, editGoal, delGoal, addTask, editTask, delTask, toggleToday, restoreGoals, clearAllGoals,
+      addGoal, editGoal, delGoal, addTask, editTask, delTask, toggleToday,
+      restoreGoals, restoreGoalsSnapshot, clearAllGoals,
     }),
-    [status, data, encrypted, streak, todayKey, addGoal, editGoal, delGoal, addTask, editTask, delTask, toggleToday, restoreGoals, clearAllGoals],
+    [
+      status, data, encrypted, streak, todayKey, addGoal, editGoal, delGoal, addTask, editTask, delTask,
+      toggleToday, restoreGoals, restoreGoalsSnapshot, clearAllGoals,
+    ],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

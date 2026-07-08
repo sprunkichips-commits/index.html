@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { BarChart3, Copy, Download, Moon, Sun, TrendingUp, Trash2, Upload } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { BarChart3, Copy, Download, FileSpreadsheet, History, Moon, Sun, Target, TrendingUp, Trash2, Upload } from 'lucide-react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
 import { Textarea } from './ui/input'
@@ -7,13 +7,46 @@ import { useStore } from '@/store/StoreContext'
 import { useGoals } from '@/store/GoalsContext'
 import { hasCloud, tgUserId } from '@/lib/telegram'
 import { today } from '@/lib/format'
+import { fmtDateLong } from '@/lib/format'
+import { downloadText, goalsCsv, invCsv, txCsv } from '@/lib/csv'
+import { GKEY, KEY, readSnapshot } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { data, theme, setTheme, chartStyle, setChartStyle, restore, loadDemo, clearAll, toast } = useStore()
+  const { data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll, toast } =
+    useStore()
   const goals = useGoals()
   const [text, setText] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Дата самого свежего автоснимка (финансы/цели) — пересчитываем при открытии.
+  const snapDate = useMemo(() => {
+    if (!open) return null
+    const a = readSnapshot(KEY)?.d ?? null
+    const b = readSnapshot(GKEY)?.d ?? null
+    return a && b ? (a > b ? a : b) : a || b
+  }, [open])
+
+  function exportTxCsv() {
+    const ok = downloadText('transactions-' + today() + '.csv', txCsv(data.transactions))
+    if (ok && data.investments.length) {
+      // отдельным файлом, с паузой — иначе браузер может проглотить второй клик
+      setTimeout(() => downloadText('investments-' + today() + '.csv', invCsv(data.investments)), 400)
+    }
+    toast(ok ? 'CSV downloaded' : 'Could not download')
+  }
+
+  function exportGoalsCsv() {
+    const ok = downloadText('goals-' + today() + '.csv', goalsCsv(goals.data))
+    toast(ok ? 'CSV downloaded' : 'Could not download')
+  }
+
+  async function restoreFromSnapshot() {
+    if (!window.confirm('Roll back to the auto-snapshot? Changes made since then will be lost.')) return
+    const okFin = restoreSnapshot()
+    const okGoals = await goals.restoreGoalsSnapshot()
+    toast(okFin || okGoals ? 'Snapshot restored' : 'No snapshot yet')
+  }
 
   // Бэкап включает и финансы, и цели — один файл спасает всё.
   // Старые файлы (без ключа goals) восстанавливаются как раньше.
@@ -144,6 +177,31 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           <Copy size={15} /> Copy
         </Button>
       </div>
+
+      <div className={cn(cap, 'mb-2')}>Export to Excel (CSV)</div>
+      <p className="mb-2 text-[13px] leading-relaxed text-sub">
+        Opens in Excel / Google Sheets as a ready table — sort, filter, build charts.
+      </p>
+      <div className="mb-5 grid grid-cols-2 gap-2">
+        <Button variant="soft" onClick={exportTxCsv}>
+          <FileSpreadsheet size={15} /> Transactions
+        </Button>
+        <Button variant="soft" onClick={exportGoalsCsv}>
+          <Target size={15} /> Goals
+        </Button>
+      </div>
+
+      {snapDate && (
+        <>
+          <div className={cn(cap, 'mb-2')}>Auto-snapshot</div>
+          <p className="mb-2 text-[13px] leading-relaxed text-sub">
+            A local safety copy is kept automatically before the first change of each day.
+          </p>
+          <Button variant="soft" className="mb-5 w-full" onClick={restoreFromSnapshot}>
+            <History size={15} /> Roll back to {fmtDateLong(snapDate)}
+          </Button>
+        </>
+      )}
 
       <div className={cn(cap, 'mb-2')}>Restore</div>
       <Button variant="soft" className="mb-2 w-full" onClick={() => fileRef.current?.click()}>
