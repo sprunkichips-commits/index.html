@@ -241,6 +241,10 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           <Trash2 size={15} /> Clear all
         </Button>
       </div>
+
+      {/* Версия сборки: сверяй с последним коммитом на GitHub, чтобы понять,
+          подтянулось ли обновление (кэш Telegram/Pages живёт до ~10 минут). */}
+      <div className="mono mt-4 text-center text-[11px] text-faint">Version {__APP_VERSION__}</div>
     </Sheet>
   )
 }
