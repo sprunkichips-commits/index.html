@@ -18,10 +18,27 @@ export function Select({
   ariaLabel?: string
   labelFor?: (v: string) => string
 }) {
+  const [open, setOpen] = React.useState(false)
+
+  // iOS/Telegram: если открыта экранная клавиатура (фокус в инпуте), тап по
+  // селекту лишь прятал её — лист сдвигался вниз вместе с клавиатурой, и
+  // «отложенный» клик WebKit промахивался мимо уехавшего триггера. Поэтому на
+  // touchend сами прячем клавиатуру и открываем список, а синтетический клик
+  // гасим preventDefault-ом. Второй тап больше не нужен.
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const ae = document.activeElement
+    if (ae instanceof HTMLElement && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) {
+      e.preventDefault()
+      ae.blur()
+      setOpen(true)
+    }
+  }
+
   return (
-    <RS.Root value={value || undefined} onValueChange={onValueChange}>
+    <RS.Root value={value || undefined} onValueChange={onValueChange} open={open} onOpenChange={setOpen}>
       <RS.Trigger
         aria-label={ariaLabel}
+        onTouchEnd={onTouchEnd}
         className={cn(
           'flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-line/12 bg-line/[0.04] px-3 text-base text-ink outline-none',
           'data-[placeholder]:text-faint focus-visible:border-accent/60 focus-visible:ring-2 focus-visible:ring-accent/25 transition',
