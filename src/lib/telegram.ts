@@ -19,6 +19,7 @@ export interface TgWebApp {
   initDataUnsafe?: { user?: TgUser }
   colorScheme?: 'light' | 'dark'
   CloudStorage?: TgCloudStorage
+  HapticFeedback?: { impactOccurred?: (style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft') => void }
   setBackgroundColor?: (color: string) => void
   setHeaderColor?: (color: string) => void
   onEvent?: (event: string, cb: () => void) => void
@@ -60,6 +61,15 @@ export function tgReady() {
   try {
     TG.ready()
     TG.expand()
+  } catch {
+    /* noop */
+  }
+}
+
+/** Лёгкий тактильный отклик (нативная вибро-отдача Telegram); вне TG — no-op. */
+export function tgHaptic() {
+  try {
+    TG?.HapticFeedback?.impactOccurred?.('light')
   } catch {
     /* noop */
   }
