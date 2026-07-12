@@ -1,6 +1,6 @@
 import {
   Home, ShoppingCart, UtensilsCrossed, Bus, Wifi, CreditCard, Cpu, Wrench,
-  Megaphone, HeartPulse, Gamepad2, Gift, Shirt, Landmark, MoreHorizontal,
+  Megaphone, HeartPulse, GraduationCap, Gamepad2, Gift, Shirt, Landmark, MoreHorizontal,
   Clapperboard, Briefcase, Users, Wallet, TrendingUp, type LucideIcon,
 } from 'lucide-react'
 import { cc } from '@/lib/data'
@@ -18,6 +18,7 @@ const ICON: Record<string, LucideIcon> = {
   'Софт и инструменты': Wrench,
   'Реклама и продвижение': Megaphone,
   'Здоровье': HeartPulse,
+  'Образование': GraduationCap,
   'Развлечения': Gamepad2,
   'Подарки': Gift,
   'Одежда': Shirt,

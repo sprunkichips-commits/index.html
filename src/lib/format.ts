@@ -53,8 +53,26 @@ export function fmtDateTime(ms: number): string {
   return isNaN(d.getTime()) ? '—' : DT_DATETIME.format(d)
 }
 
-/** Группировка вводимой суммы по разрядам (для полей ввода) */
-export function grp(s: string): string {
-  const d = (s || '').replace(/\D/g, '')
-  return d ? Number(d).toLocaleString('en-US') : ''
+/**
+ * Ввод суммы с нативной decimal-клавиатуры: цифры + один разделитель (запятая
+ * или точка) + до 2 знаков после него. Разряды группируются ПРОБЕЛАМИ (как все
+ * суммы в приложении), поэтому запятая/точка всегда однозначно читается как
+ * десятичный разделитель: «1500,5» → «1 500,5».
+ */
+export function grpAmount(raw: string): string {
+  const s = (raw || '').replace(/[^\d.,]/g, '') // пробелы-разряды и мусор отпадают
+  const sep = s.search(/[.,]/)
+  const int = (sep >= 0 ? s.slice(0, sep) : s).replace(/\D/g, '').slice(0, 13)
+  const intFmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  if (sep < 0) return intFmt
+  const frac = s.slice(sep + 1).replace(/\D/g, '').slice(0, 2)
+  return (intFmt || '0') + ',' + frac
+}
+
+/** Число из строки grpAmount: «1 500,5» → 1500.5 (0 — если пусто/мусор). */
+export function parseAmount(s: string): number {
+  const m = (s || '').replace(/[^\d.,]/g, '').match(/^(\d*)(?:[.,](\d*))?/)
+  if (!m || (!m[1] && !m[2])) return 0
+  const v = Number(m[1] || 0) + Number('0.' + (m[2] || 0))
+  return isFinite(v) ? v : 0
 }
