@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -23,6 +23,33 @@ export function AddSheet({
   const [category, setCategory] = useState('')
   const [date, setDate] = useState(today())
   const [note, setNote] = useState('')
+  const amountRef = useRef<HTMLInputElement>(null)
+  const caretSig = useRef<number | null>(null) // позиция курсора в «значащих» символах
+
+  // Плавный ввод суммы: переформатирование (пробелы разрядов, нормализация
+  // запятой/точки) меняет строку — React сбросил бы курсор в конец. Запоминаем,
+  // сколько ЗНАЧАЩИХ символов (цифр и разделителей) было слева от курсора, и
+  // после ре-рендера ставим курсор за тем же количеством значащих символов.
+  function onAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const el = e.target
+    const caret = el.selectionStart ?? el.value.length
+    caretSig.current = (el.value.slice(0, caret).match(/[\d.,]/g) || []).length
+    setAmount(grpAmount(el.value))
+  }
+
+  useLayoutEffect(() => {
+    const el = amountRef.current
+    const sig = caretSig.current
+    if (!el || sig == null) return
+    caretSig.current = null
+    let pos = 0
+    let seen = 0
+    while (pos < el.value.length && seen < sig) {
+      if (/[\d.,]/.test(el.value[pos])) seen++
+      pos++
+    }
+    el.setSelectionRange(pos, pos)
+  }, [amount])
 
   // сброс при каждом открытии + установка типа
   useEffect(() => {
@@ -79,12 +106,13 @@ export function AddSheet({
       <label className="mb-1.5 block text-xs font-medium text-sub">Amount</label>
       <div className="mb-3 flex items-center gap-2 rounded-xl border border-line/12 bg-line/[0.04] px-3">
         <input
+          ref={amountRef}
           autoFocus
           type="text"
           inputMode="decimal"
           placeholder="0"
           value={amount}
-          onChange={(e) => setAmount(grpAmount(e.target.value))}
+          onChange={onAmountChange}
           className={cn('mono h-12 w-full bg-transparent text-2xl font-bold outline-none placeholder:text-faint', accent)}
         />
         <span className="text-lg font-semibold text-faint">₽</span>

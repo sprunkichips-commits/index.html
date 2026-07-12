@@ -187,10 +187,12 @@ const MS_2100 = 4102444800000
 export function clampStr(s: unknown, max: number): string {
   return String(s == null ? '' : s).slice(0, max)
 }
+/** Сумма: неотрицательная, в пределах AMT_MAX, с точностью до копеек (2 знака).
+ *  Целые значения остаются целыми — старые данные не меняются. */
 export function clampAmt(n: unknown): number {
   const v = Number(n)
   if (!isFinite(v) || v < 0) return 0
-  return Math.round(Math.min(v, AMT_MAX))
+  return Math.round(Math.min(v, AMT_MAX) * 100) / 100
 }
 function safeId(id: unknown): string {
   return typeof id === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(id) ? id : uid()

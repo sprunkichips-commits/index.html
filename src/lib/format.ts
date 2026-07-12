@@ -1,13 +1,22 @@
-const NF = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const NF0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const NF2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-/** Сумма с разделением разрядов и знаком валюты: 12 345 ₽ */
-export function rub(n: number): string {
-  return NF.format(Math.round(n || 0)) + ' ₽'
+/** Округление до копеек (2 знака) с защитой от дрейфа float: 0.1+0.2 → 0.3. */
+export function toCents(n: number): number {
+  return Math.round((n || 0) * 100) / 100
 }
 
-/** Сумма со знаком: +12 345 ₽ / −12 345 ₽ */
+/** Сумма с разрядами и ₽; копейки показываются, только если они есть: 12,345 ₽ / 100.50 ₽ */
+export function rub(n: number): string {
+  const c = toCents(n)
+  return (c % 1 ? NF2 : NF0).format(c) + ' ₽'
+}
+
+/** Сумма со знаком: +12,345 ₽ / −100.50 ₽ */
 export function rubS(n: number): string {
-  return (n > 0 ? '+' : n < 0 ? '−' : '') + NF.format(Math.abs(Math.round(n || 0))) + ' ₽'
+  const c = toCents(n)
+  const a = Math.abs(c)
+  return (c > 0 ? '+' : c < 0 ? '−' : '') + (a % 1 ? NF2 : NF0).format(a) + ' ₽'
 }
 
 /** Один знак после запятой без хвостового нуля: 4.5 → «4.5», 9 → «9» */

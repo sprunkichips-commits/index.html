@@ -22,6 +22,12 @@ export function buildCsv(rows: CsvCell[][]): string {
   return '\ufeff' + 'sep=;\r\n' + rows.map((r) => r.map(esc).join(';')).join('\r\n')
 }
 
+/** Числа для Excel: дробная часть с запятой — так русский Excel читает их как
+ *  числа, а не как текст (разделитель полей у нас ';', конфликта нет). */
+function num(n: number): string {
+  return String(n).replace('.', ',')
+}
+
 /** Локальные дата-время добавления для Excel: '2026-07-06 21:40'. */
 function fmtAdded(ms: number): string {
   const d = new Date(ms)
@@ -37,7 +43,7 @@ export function txCsv(txs: Tx[]): string {
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (addedAt(a) || 0) - (addedAt(b) || 0)))
     .forEach((t) => {
       const ms = addedAt(t)
-      rows.push([t.date, typeLabel(t.type), catLabel(t.category), t.amount, t.note || '', ms ? fmtAdded(ms) : ''])
+      rows.push([t.date, typeLabel(t.type), catLabel(t.category), num(t.amount), t.note || '', ms ? fmtAdded(ms) : ''])
     })
   return buildCsv(rows)
 }
@@ -48,7 +54,7 @@ export function invCsv(inv: Inv[]): string {
   inv.forEach((x) => {
     const pl = (x.current || 0) - (x.invested || 0)
     const ret = x.invested > 0 ? Math.round((pl / x.invested) * 1000) / 10 : 0
-    rows.push([x.name, x.type, x.invested, x.current, pl, ret])
+    rows.push([x.name, x.type, num(x.invested), num(x.current), num(pl), num(ret)])
   })
   return buildCsv(rows)
 }
