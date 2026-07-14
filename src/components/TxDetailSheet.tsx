@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import { CategoryIcon } from './CategoryIcon'
 import { useStore } from '@/store/StoreContext'
 import { addedAt, catLabel, typeLabel, type Tx } from '@/lib/data'
+import { subCategoryLabel } from '@/lib/categories'
 import { fmtDateLong, fmtDateTime, rub } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +44,9 @@ export function TxDetailSheet({ tx, onClose }: { tx: Tx | null; onClose: () => v
           <div className="mb-5 flex flex-col items-center text-center">
             <CategoryIcon category={t.category} income={inc} size={26} box="h-16 w-16" />
             <div className="mt-3 text-base font-semibold">{catLabel(t.category)}</div>
+            {t.subCategory ? (
+              <div className="mt-0.5 text-[13px] text-sub">{subCategoryLabel(t.subCategory)}</div>
+            ) : null}
             <span
               className={cn(
                 'mt-1 rounded-full px-2.5 py-0.5 text-xs font-semibold',

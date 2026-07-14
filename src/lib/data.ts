@@ -7,7 +7,8 @@ export interface Tx {
   id: string
   date: string // YYYY-MM-DD
   type: TxType
-  category: string
+  category: string // верхний уровень (стабильный ключ, напр. 'Продукты')
+  subCategory?: string // опц. подкатегория (SubCategory.id, напр. 'groc-meat')
   amount: number
   note: string
   createdAt?: number // epoch ms — когда операция была добавлена (опц., для старых записей нет)
@@ -239,11 +240,13 @@ export function sanitize(o: unknown): AppData | null {
         typeof t.createdAt === 'number' && t.createdAt > MS_2010 && t.createdAt < MS_2100
           ? t.createdAt
           : undefined
+      const sub = clampStr(t.subCategory || '', CAT_MAX)
       return {
         id: safeId(t.id),
         date: dt,
         type: t.type === 'Доход' ? 'Доход' : 'Расход',
         category: clampStr(t.category || 'Прочие расходы', CAT_MAX),
+        ...(sub ? { subCategory: sub } : {}),
         amount: clampAmt(t.amount),
         note: clampStr(t.note || '', NOTE_MAX),
         ...(ca ? { createdAt: ca } : {}),
@@ -411,7 +414,12 @@ export const DEMO: AppData = {
     { id: uid(), date: '2026-06-08', type: 'Расход', category: 'Подписки и сервисы', amount: 4500, note: 'Adobe' },
     { id: uid(), date: '2026-06-12', type: 'Расход', category: 'Оборудование', amount: 60000, note: 'Microphone' },
     { id: uid(), date: '2026-06-14', type: 'Расход', category: 'Подарки', amount: 5000, note: "Friend's birthday" },
-    { id: uid(), date: '2026-06-22', type: 'Расход', category: 'Продукты', amount: 3100, note: 'Grocery store' },
+    // Продукты с подкатегориями (ids — см. SUBCATEGORIES в categories.ts)
+    { id: uid(), date: '2026-06-22', type: 'Расход', category: 'Продукты', subCategory: 'groc-meat', amount: 3100, note: 'Grocery store' },
+    { id: uid(), date: '2026-06-24', type: 'Расход', category: 'Продукты', subCategory: 'groc-water', amount: 780, note: 'Water & drinks' },
+    { id: uid(), date: '2026-06-26', type: 'Расход', category: 'Продукты', subCategory: 'groc-veg', amount: 1450, note: 'Market' },
+    { id: uid(), date: '2026-06-28', type: 'Расход', category: 'Продукты', subCategory: 'groc-snacks', amount: 640, note: 'Snacks' },
+    { id: uid(), date: '2026-06-29', type: 'Расход', category: 'Продукты', amount: 500, note: 'Corner store' },
   ],
   investments: [],
 }

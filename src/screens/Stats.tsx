@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, MousePointerClick } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, ChevronRight, MousePointerClick } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
 import { catLabel, computeStats, MONTHS, MS, typeLabel, type TxType } from '@/lib/data'
+import { hasSubCategories } from '@/lib/categories'
 import { rub } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
@@ -9,6 +10,7 @@ import { BarStat, type BarPoint } from '@/components/charts/BarStat'
 import { StudioLine } from '@/components/charts/StudioLine'
 import { GroupedMonths } from '@/components/charts/GroupedMonths'
 import { CategoryIcon } from '@/components/CategoryIcon'
+import { CategoryDetailSheet } from '@/components/CategoryDetailSheet'
 import { cn } from '@/lib/utils'
 
 type Mode = 'days' | 'weeks' | 'months' | 'years'
@@ -25,6 +27,7 @@ export function Stats() {
   const [view, setView] = useState<TxType>('Расход')
   const [mode, setMode] = useState<Mode>('months')
   const [sel, setSel] = useState(0)
+  const [detailCat, setDetailCat] = useState<string | null>(null)
 
   // Один проход по операциям выбранного типа: ряды для всех режимов + категории.
   const agg = useMemo(() => {
@@ -184,8 +187,22 @@ export function Stats() {
               const arrowUp = c.delta != null && c.delta > 0
               const good = c.delta != null && (view === 'Доход' ? c.delta > 0 : c.delta < 0)
               const share = agg.total > 0 ? (c.value / agg.total) * 100 : 0
+              // У расходной категории с подкатегориями строка кликабельна и
+              // открывает детализацию (bottom sheet), а не разворачивает аккордеон.
+              const drillable = view === 'Расход' && hasSubCategories(c.name)
+              const Wrap = drillable ? 'button' : 'div'
               return (
-                <div key={c.name} className={cn('flex items-center gap-3 py-2.5', i && 'border-t border-line/8')}>
+                <Wrap
+                  key={c.name}
+                  {...(drillable
+                    ? { type: 'button' as const, onClick: () => setDetailCat(c.name), 'aria-label': `${catLabel(c.name)} details` }
+                    : {})}
+                  className={cn(
+                    'flex w-full items-center gap-3 py-2.5 text-left',
+                    i && 'border-t border-line/8',
+                    drillable && 'transition active:scale-[.99]',
+                  )}
+                >
                   {view === 'Доход' ? (
                     <span className="grid h-10 w-10 flex-none place-items-center rounded-2xl bg-pos/15 text-pos">
                       <ArrowUpRight size={18} />
@@ -194,7 +211,10 @@ export function Stats() {
                     <CategoryIcon category={c.name} />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{catLabel(c.name)}</div>
+                    <div className="flex items-center gap-1 truncate text-sm font-medium">
+                      {catLabel(c.name)}
+                      {drillable && <ChevronRight size={14} className="flex-none text-faint" />}
+                    </div>
                     <div className="text-xs text-faint">
                       {Math.round(share)}% of {shareWord}
                     </div>
@@ -215,12 +235,14 @@ export function Stats() {
                       <div className="text-xs text-faint">new</div>
                     )}
                   </div>
-                </div>
+                </Wrap>
               )
             })}
           </div>
         )}
       </Card>
+
+      <CategoryDetailSheet categoryId={detailCat} onClose={() => setDetailCat(null)} />
     </div>
   )
 }

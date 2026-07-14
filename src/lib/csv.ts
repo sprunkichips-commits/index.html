@@ -9,6 +9,7 @@
 // первая строка — некритично, приоритет отдан Excel по просьбе владельца).
 
 import { type Inv, type Tx, addedAt, catLabel, typeLabel } from './data'
+import { subCategoryLabel } from './categories'
 import { type GoalsData, percentForDay } from './goals'
 
 export type CsvCell = string | number
@@ -37,13 +38,21 @@ function fmtAdded(ms: number): string {
 
 /** Операции: по строке на транзакцию, отсортированы по дате (старые сверху). */
 export function txCsv(txs: Tx[]): string {
-  const rows: CsvCell[][] = [['Date', 'Type', 'Category', 'Amount', 'Note', 'Added at']]
+  const rows: CsvCell[][] = [['Date', 'Type', 'Category', 'Subcategory', 'Amount', 'Note', 'Added at']]
   txs
     .slice()
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (addedAt(a) || 0) - (addedAt(b) || 0)))
     .forEach((t) => {
       const ms = addedAt(t)
-      rows.push([t.date, typeLabel(t.type), catLabel(t.category), num(t.amount), t.note || '', ms ? fmtAdded(ms) : ''])
+      rows.push([
+        t.date,
+        typeLabel(t.type),
+        catLabel(t.category),
+        t.subCategory ? subCategoryLabel(t.subCategory) : '',
+        num(t.amount),
+        t.note || '',
+        ms ? fmtAdded(ms) : '',
+      ])
     })
   return buildCsv(rows)
 }

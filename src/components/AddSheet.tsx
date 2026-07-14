@@ -5,6 +5,7 @@ import { Input } from './ui/input'
 import { Select } from './ui/select'
 import { useStore } from '@/store/StoreContext'
 import { EXPENSE, INCOME, NOTE_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
+import { subCategoriesOf, subCategoryLabel } from '@/lib/categories'
 import { grpAmount, parseAmount, today } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +22,7 @@ export function AddSheet({
   const [type, setType] = useState<TxType>(initialType)
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
+  const [subCategory, setSubCategory] = useState('')
   const [date, setDate] = useState(today())
   const [note, setNote] = useState('')
   const amountRef = useRef<HTMLInputElement>(null)
@@ -57,6 +59,7 @@ export function AddSheet({
       setType(initialType)
       setAmount('')
       setCategory('')
+      setSubCategory('')
       setDate(today())
       setNote('')
     }
@@ -70,11 +73,17 @@ export function AddSheet({
     })
   }, [type])
 
+  // подкатегория действительна только внутри своей категории — сбрасываем при смене
+  useEffect(() => {
+    setSubCategory('')
+  }, [category])
+
   const accent = type === 'Доход' ? 'text-pos' : 'text-neg'
   const list = type === 'Доход' ? INCOME : EXPENSE
+  const subs = subCategoriesOf(category)
 
   function save() {
-    const ok = addTx({ type, amount: parseAmount(amount), category, date, note })
+    const ok = addTx({ type, amount: parseAmount(amount), category, subCategory, date, note })
     if (!ok) {
       toast('Enter an amount and a category')
       return
@@ -119,7 +128,7 @@ export function AddSheet({
       </div>
 
       <label className="mb-1.5 block text-xs font-medium text-sub">Category</label>
-      <div className="mb-3">
+      <div className={cn(subs.length ? 'mb-2' : 'mb-3')}>
         <Select
           value={category}
           onValueChange={setCategory}
@@ -129,6 +138,20 @@ export function AddSheet({
           ariaLabel="Category"
         />
       </div>
+
+      {/* Подкатегория — только для категорий с детализацией (напр. Groceries) */}
+      {subs.length > 0 && (
+        <div className="mb-3">
+          <Select
+            value={subCategory}
+            onValueChange={setSubCategory}
+            placeholder="Subcategory (optional)…"
+            options={subs.map((s) => s.id)}
+            labelFor={subCategoryLabel}
+            ariaLabel="Subcategory"
+          />
+        </div>
+      )}
 
       <label className="mb-1.5 block text-xs font-medium text-sub">Date</label>
       <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mb-3" />

@@ -50,6 +50,7 @@ interface AddTxInput {
   type: TxType
   amount: number
   category: string
+  subCategory?: string
   date: string
   note: string
 }
@@ -196,6 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addTx = useCallback(
     (input: AddTxInput): boolean => {
       const category = clampStr(input.category, CAT_MAX)
+      const subCategory = clampStr(input.subCategory || '', CAT_MAX)
       const note = clampStr((input.note || '').trim(), NOTE_MAX)
       const amount = clampAmt(input.amount)
       if (!category || amount <= 0 || !validDate(input.date)) return false
@@ -204,6 +206,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         date: input.date,
         type: input.type === 'Доход' ? 'Доход' : 'Расход',
         category,
+        ...(subCategory ? { subCategory } : {}),
         amount,
         note,
         createdAt: Date.now(),
