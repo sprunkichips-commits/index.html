@@ -1,6 +1,7 @@
 import { ArrowLeftRight, Trash2 } from 'lucide-react'
-import { type Tx, catLabel } from '@/lib/data'
+import { type Tx, catLabel, typeLabel } from '@/lib/data'
 import { rub } from '@/lib/format'
+import { tgConfirm } from '@/lib/telegram'
 import { cn } from '@/lib/utils'
 import { CategoryIcon } from './CategoryIcon'
 
@@ -16,6 +17,13 @@ export function TxRow({
   const inc = tx.type === 'Доход'
   const d = new Date(tx.date + 'T00:00:00')
   const dl = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+
+  async function confirmDelete() {
+    const ok = await tgConfirm(
+      `Delete this ${typeLabel(tx.type).toLowerCase()}?\n${catLabel(tx.category)} · ${inc ? '+' : '−'}${rub(tx.amount)}`,
+    )
+    if (ok) onDelete(tx.id)
+  }
   return (
     <div className="group flex items-center gap-1">
       <button
@@ -41,7 +49,7 @@ export function TxRow({
         </div>
       </button>
       <button
-        onClick={() => onDelete(tx.id)}
+        onClick={confirmDelete}
         aria-label="Delete"
         className="grid h-11 w-11 flex-none place-items-center rounded-xl text-faint transition hover:bg-neg/15 hover:text-neg active:scale-95"
       >

@@ -6,6 +6,7 @@ import { CategoryIcon } from './CategoryIcon'
 import { useStore } from '@/store/StoreContext'
 import { addedAt, catLabel, typeLabel, type Tx } from '@/lib/data'
 import { subCategoryLabel } from '@/lib/categories'
+import { tgConfirm } from '@/lib/telegram'
 import { fmtDateLong, fmtDateTime, rub } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -82,9 +83,14 @@ export function TxDetailSheet({ tx, onClose }: { tx: Tx | null; onClose: () => v
           <Button
             variant="danger"
             className="mt-4 w-full"
-            onClick={() => {
-              delTx(t.id)
-              onClose()
+            onClick={async () => {
+              const ok = await tgConfirm(
+                `Delete this ${typeLabel(t.type).toLowerCase()}?\n${catLabel(t.category)} · ${inc ? '+' : '−'}${rub(t.amount)}`,
+              )
+              if (ok) {
+                delTx(t.id)
+                onClose()
+              }
             }}
           >
             <Trash2 size={15} /> Delete transaction

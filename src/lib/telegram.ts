@@ -19,6 +19,7 @@ export interface TgWebApp {
   initDataUnsafe?: { user?: TgUser }
   colorScheme?: 'light' | 'dark'
   CloudStorage?: TgCloudStorage
+  showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void
   setBackgroundColor?: (color: string) => void
   setHeaderColor?: (color: string) => void
   onEvent?: (event: string, cb: () => void) => void
@@ -62,6 +63,32 @@ export function tgReady() {
     TG.expand()
   } catch {
     /* noop */
+  }
+}
+
+/**
+ * Подтверждение действия. В Telegram — нативный попап showConfirm, вне
+ * Telegram (или на старом клиенте) — обычный window.confirm. Возвращает true,
+ * если пользователь подтвердил. Используется перед необратимыми действиями.
+ */
+export function tgConfirm(message: string): Promise<boolean> {
+  if (TG && typeof TG.showConfirm === 'function') {
+    return new Promise((resolve) => {
+      try {
+        TG.showConfirm!(message, (ok) => resolve(!!ok))
+      } catch {
+        resolve(safeWindowConfirm(message))
+      }
+    })
+  }
+  return Promise.resolve(safeWindowConfirm(message))
+}
+
+function safeWindowConfirm(message: string): boolean {
+  try {
+    return window.confirm(message)
+  } catch {
+    return false // не смогли спросить — безопаснее НЕ выполнять необратимое
   }
 }
 
