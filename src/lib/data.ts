@@ -11,6 +11,7 @@ export interface Tx {
   category: string // верхний уровень (стабильный ключ, напр. 'Продукты')
   subCategory?: string // опц. подкатегория (SubCategory.id, напр. 'groc-meat')
   transit?: boolean // «транзит»: деньги проходят насквозь, в разбивке учитывается только остаток
+  payer?: string // «от кого» — свободный текст для дохода (напр. «Мама»)
   amount: number
   note: string
   createdAt?: number // epoch ms — когда операция была добавлена (опц., для старых записей нет)
@@ -178,6 +179,7 @@ export const NOTE_MAX = 140
 export const NAME_MAX = 40
 export const TYPE_MAX = 24
 export const CAT_MAX = 40
+export const PAYER_MAX = 60
 export const AMT_MAX = 1e12
 // Потолки восстановления из бэкапа. 20 000 операций — это ~13 лет по 4 в день;
 // раньше было 5000 (могло молча отрезать историю многолетнего пользователя).
@@ -243,6 +245,7 @@ export function sanitize(o: unknown): AppData | null {
           ? t.createdAt
           : undefined
       const sub = clampStr(t.subCategory || '', CAT_MAX)
+      const payer = clampStr(t.payer || '', PAYER_MAX).trim()
       return {
         id: safeId(t.id),
         date: dt,
@@ -250,6 +253,7 @@ export function sanitize(o: unknown): AppData | null {
         category: clampStr(t.category || 'Прочие расходы', CAT_MAX),
         ...(sub ? { subCategory: sub } : {}),
         ...(t.transit === true ? { transit: true } : {}),
+        ...(payer ? { payer } : {}),
         amount: clampAmt(t.amount),
         note: clampStr(t.note || '', NOTE_MAX),
         ...(ca ? { createdAt: ca } : {}),
@@ -416,7 +420,8 @@ export const DEMO: AppData = {
     { id: uid(), date: '2026-06-29', type: 'Расход', category: 'Продукты', amount: 500, note: 'Corner store' },
     // Транзит: дали 5000, 2700 передал дальше, 2300 оставил себе. В «Income
     // sources» попадёт только чистый остаток (+2300 в «Family»), не 5000.
-    { id: uid(), date: '2026-06-20', type: 'Доход', category: 'Близкие', transit: true, amount: 5000, note: 'Cash to pass on' },
+    { id: uid(), date: '2026-06-15', type: 'Доход', category: 'Близкие', payer: 'Mom', amount: 6800, note: 'Birthday gift' },
+    { id: uid(), date: '2026-06-20', type: 'Доход', category: 'Близкие', payer: 'Grandma', transit: true, amount: 5000, note: 'Cash to pass on' },
     { id: uid(), date: '2026-06-20', type: 'Расход', category: 'Прочие расходы', transit: true, amount: 2700, note: 'Passed on' },
   ],
   investments: [],

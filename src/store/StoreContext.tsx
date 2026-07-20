@@ -28,6 +28,7 @@ import {
   CAT_MAX,
   NAME_MAX,
   NOTE_MAX,
+  PAYER_MAX,
   TYPE_MAX,
   DEMO,
 } from '@/lib/data'
@@ -52,6 +53,7 @@ interface AddTxInput {
   category: string
   subCategory?: string
   transit?: boolean
+  payer?: string
   date: string
   note: string
 }
@@ -199,6 +201,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (input: AddTxInput): boolean => {
       const category = clampStr(input.category, CAT_MAX)
       const subCategory = clampStr(input.subCategory || '', CAT_MAX)
+      const payer = clampStr((input.payer || '').trim(), PAYER_MAX)
       const note = clampStr((input.note || '').trim(), NOTE_MAX)
       const amount = clampAmt(input.amount)
       if (!category || amount <= 0 || !validDate(input.date)) return false
@@ -209,6 +212,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         category,
         ...(subCategory ? { subCategory } : {}),
         ...(input.transit ? { transit: true } : {}),
+        ...(payer ? { payer } : {}),
         amount,
         note,
         createdAt: Date.now(),

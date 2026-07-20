@@ -5,7 +5,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Select } from './ui/select'
 import { useStore } from '@/store/StoreContext'
-import { EXPENSE, INCOME, NOTE_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
+import { EXPENSE, INCOME, NOTE_MAX, PAYER_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
 import { subCategoriesOf, subCategoryLabel } from '@/lib/categories'
 import { grpAmount, parseAmount, today } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -25,6 +25,7 @@ export function AddSheet({
   const [category, setCategory] = useState('')
   const [subCategory, setSubCategory] = useState('')
   const [transit, setTransit] = useState(false)
+  const [payer, setPayer] = useState('')
   const [date, setDate] = useState(today())
   const [note, setNote] = useState('')
   const amountRef = useRef<HTMLInputElement>(null)
@@ -63,6 +64,7 @@ export function AddSheet({
       setCategory('')
       setSubCategory('')
       setTransit(false)
+      setPayer('')
       setDate(today())
       setNote('')
     }
@@ -86,7 +88,7 @@ export function AddSheet({
   const subs = subCategoriesOf(category)
 
   function save() {
-    const ok = addTx({ type, amount: parseAmount(amount), category, subCategory, transit, date, note })
+    const ok = addTx({ type, amount: parseAmount(amount), category, subCategory, transit, payer, date, note })
     if (!ok) {
       toast('Enter an amount and a category')
       return
@@ -154,6 +156,23 @@ export function AddSheet({
             ariaLabel="Subcategory"
           />
         </div>
+      )}
+
+      {/* «От кого» — свободный текст, только для дохода. Виден в детализации источника. */}
+      {type === 'Доход' && (
+        <>
+          <label className="mb-1.5 block text-xs font-medium text-sub">
+            From whom <span className="text-faint">(optional)</span>
+          </label>
+          <Input
+            type="text"
+            maxLength={PAYER_MAX}
+            placeholder="e.g. Mom, employer, client"
+            value={payer}
+            onChange={(e) => setPayer(e.target.value)}
+            className="mb-3"
+          />
+        </>
       )}
 
       <label className="mb-1.5 block text-xs font-medium text-sub">Date</label>

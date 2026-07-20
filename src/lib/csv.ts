@@ -38,7 +38,9 @@ function fmtAdded(ms: number): string {
 
 /** Операции: по строке на транзакцию, отсортированы по дате (старые сверху). */
 export function txCsv(txs: Tx[]): string {
-  const rows: CsvCell[][] = [['Date', 'Type', 'Category', 'Subcategory', 'Transit', 'Amount', 'Note', 'Added at']]
+  const rows: CsvCell[][] = [
+    ['Date', 'Type', 'Category', 'Subcategory', 'From whom', 'Transit', 'Amount', 'Note', 'Added at'],
+  ]
   txs
     .slice()
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (addedAt(a) || 0) - (addedAt(b) || 0)))
@@ -49,6 +51,7 @@ export function txCsv(txs: Tx[]): string {
         typeLabel(t.type),
         catLabel(t.category),
         t.subCategory ? subCategoryLabel(t.subCategory) : '',
+        t.payer || '',
         t.transit ? 'Yes' : '',
         num(t.amount),
         t.note || '',

@@ -12,6 +12,7 @@ import { StudioLine } from '@/components/charts/StudioLine'
 import { GroupedMonths } from '@/components/charts/GroupedMonths'
 import { CategoryIcon } from '@/components/CategoryIcon'
 import { CategoryDetailSheet } from '@/components/CategoryDetailSheet'
+import { IncomeSourceSheet } from '@/components/IncomeSourceSheet'
 import { cn } from '@/lib/utils'
 
 type Mode = 'days' | 'weeks' | 'months' | 'years'
@@ -29,6 +30,7 @@ export function Stats() {
   const [mode, setMode] = useState<Mode>('months')
   const [sel, setSel] = useState(0)
   const [detailCat, setDetailCat] = useState<string | null>(null)
+  const [incomeCat, setIncomeCat] = useState<string | null>(null)
 
   // Ряды графиков и категории с зачётом транзита (см. lib/breakdown).
   const agg = useMemo(() => {
@@ -190,15 +192,17 @@ export function Stats() {
               const arrowUp = c.delta != null && c.delta > 0
               const good = c.delta != null && (view === 'Доход' ? c.delta > 0 : c.delta < 0)
               const share = agg.total > 0 ? (c.value / agg.total) * 100 : 0
-              // У расходной категории с подкатегориями строка кликабельна и
-              // открывает детализацию (bottom sheet), а не разворачивает аккордеон.
-              const drillable = view === 'Расход' && hasSubCategories(c.name)
+              // Доход: любой источник кликабелен → список операций «от кого».
+              // Расход: кликабельны категории с подкатегориями (напр. Groceries).
+              const isIncome = view === 'Доход'
+              const drillable = isIncome || hasSubCategories(c.name)
+              const onDrill = () => (isIncome ? setIncomeCat(c.name) : setDetailCat(c.name))
               const Wrap = drillable ? 'button' : 'div'
               return (
                 <Wrap
                   key={c.name}
                   {...(drillable
-                    ? { type: 'button' as const, onClick: () => setDetailCat(c.name), 'aria-label': `${catLabel(c.name)} details` }
+                    ? { type: 'button' as const, onClick: onDrill, 'aria-label': `${catLabel(c.name)} details` }
                     : {})}
                   className={cn(
                     'flex w-full items-center gap-3 py-2.5 text-left',
@@ -246,6 +250,7 @@ export function Stats() {
       </Card>
 
       <CategoryDetailSheet categoryId={detailCat} onClose={() => setDetailCat(null)} />
+      <IncomeSourceSheet categoryId={incomeCat} onClose={() => setIncomeCat(null)} />
     </div>
   )
 }

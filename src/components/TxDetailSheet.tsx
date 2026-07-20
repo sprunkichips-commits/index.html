@@ -67,6 +67,7 @@ export function TxDetailSheet({ tx, onClose }: { tx: Tx | null; onClose: () => v
           </div>
 
           <div className="divide-y divide-line/8 rounded-2xl border border-line/10 bg-line/[0.03] px-4">
+            {t.payer ? <Row label="From whom" value={t.payer} /> : null}
             <Row label="Transaction date" value={fmtDateLong(t.date)} />
             {ms != null && <Row label="Added" value={fmtDateTime(ms)} />}
             {t.note ? (
