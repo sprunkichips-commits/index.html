@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { ArrowLeftRight, Trash2 } from 'lucide-react'
 import { type Tx, catLabel } from '@/lib/data'
 import { rub } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -26,7 +26,10 @@ export function TxRow({
         <CategoryIcon category={tx.category} income={inc} />
         <div className="min-w-0 flex-1">
           {/* React экранирует пользовательский текст автоматически */}
-          <div className="truncate text-sm font-medium text-ink">{catLabel(tx.category)}</div>
+          <div className="flex items-center gap-1 truncate text-sm font-medium text-ink">
+            {catLabel(tx.category)}
+            {tx.transit && <ArrowLeftRight size={12} className="flex-none text-faint" aria-label="Transit" />}
+          </div>
           <div className="truncate text-xs text-faint">
             {dl}
             {tx.note ? ' · ' + tx.note : ''}

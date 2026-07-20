@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowLeftRight, Check } from 'lucide-react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -23,6 +24,7 @@ export function AddSheet({
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
   const [subCategory, setSubCategory] = useState('')
+  const [transit, setTransit] = useState(false)
   const [date, setDate] = useState(today())
   const [note, setNote] = useState('')
   const amountRef = useRef<HTMLInputElement>(null)
@@ -60,6 +62,7 @@ export function AddSheet({
       setAmount('')
       setCategory('')
       setSubCategory('')
+      setTransit(false)
       setDate(today())
       setNote('')
     }
@@ -83,7 +86,7 @@ export function AddSheet({
   const subs = subCategoriesOf(category)
 
   function save() {
-    const ok = addTx({ type, amount: parseAmount(amount), category, subCategory, date, note })
+    const ok = addTx({ type, amount: parseAmount(amount), category, subCategory, transit, date, note })
     if (!ok) {
       toast('Enter an amount and a category')
       return
@@ -165,8 +168,32 @@ export function AddSheet({
         placeholder="e.g. corner store"
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        className="mb-4"
+        className="mb-3"
       />
+
+      {/* Транзит: деньги проходят насквозь. Пометь и приход, и передачу дальше —
+          в статистике учтётся только остаток, а не вся сумма. */}
+      <button
+        type="button"
+        onClick={() => setTransit((v) => !v)}
+        aria-pressed={transit}
+        className="mb-4 flex w-full items-center gap-3 rounded-xl border border-line/12 bg-line/[0.04] px-3 py-2.5 text-left transition active:scale-[.99]"
+      >
+        <span
+          className={cn(
+            'grid h-6 w-6 flex-none place-items-center rounded-md border transition',
+            transit ? 'border-accent bg-accent text-accent-ink' : 'border-line/25 text-transparent',
+          )}
+        >
+          <Check size={15} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            <ArrowLeftRight size={14} className="text-faint" /> Transit / pass-through
+          </span>
+          <span className="mt-0.5 block text-xs text-faint">Only the net remainder counts in stats, not the full amount</span>
+        </span>
+      </button>
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="ghost" onClick={() => onOpenChange(false)}>

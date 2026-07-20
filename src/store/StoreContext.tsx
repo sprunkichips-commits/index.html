@@ -51,6 +51,7 @@ interface AddTxInput {
   amount: number
   category: string
   subCategory?: string
+  transit?: boolean
   date: string
   note: string
 }
@@ -207,6 +208,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         type: input.type === 'Доход' ? 'Доход' : 'Расход',
         category,
         ...(subCategory ? { subCategory } : {}),
+        ...(input.transit ? { transit: true } : {}),
         amount,
         note,
         createdAt: Date.now(),

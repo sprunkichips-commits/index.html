@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowUpRight, ChevronRight, MousePointerClick } from 'l
 import { useStore } from '@/store/StoreContext'
 import { catLabel, computeStats, MONTHS, MS, typeLabel, type TxType } from '@/lib/data'
 import { hasSubCategories } from '@/lib/categories'
+import { bucketTotals, getExpenseSources, getIncomeSources } from '@/lib/breakdown'
 import { rub } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
@@ -29,7 +30,7 @@ export function Stats() {
   const [sel, setSel] = useState(0)
   const [detailCat, setDetailCat] = useState<string | null>(null)
 
-  // Один проход по операциям выбранного типа: ряды для всех режимов + категории.
+  // Ряды графиков и категории с зачётом транзита (см. lib/breakdown).
   const agg = useMemo(() => {
     const y = cursor.y
     const m = cursor.m
@@ -37,31 +38,33 @@ export function Stats() {
     const prev = new Date(y, m - 1, 1)
     const py = prev.getFullYear()
     const pm = prev.getMonth()
+    // Итог корзины в деньгах выбранного типа (доход/расход) после зачёта транзита.
+    const pick = (b?: { income: number; expense: number }) => (view === 'Доход' ? b?.income : b?.expense) || 0
 
-    const months = new Array(12).fill(0)
-    const days = new Array(nd).fill(0)
-    const byYear: Record<number, number> = {}
-    const catNow: Record<string, number> = {}
-    const catPrev: Record<string, number> = {}
-
-    data.transactions.forEach((t) => {
-      if (t.type !== view) return
+    const monthB = bucketTotals(data.transactions, (t) => {
       const d = new Date(t.date + 'T00:00:00')
-      const ty = d.getFullYear()
-      const tm = d.getMonth()
-      const td = d.getDate()
-      byYear[ty] = (byYear[ty] || 0) + t.amount
-      if (ty === y) months[tm] += t.amount
-      if (ty === y && tm === m) {
-        days[td - 1] += t.amount
-        catNow[t.category] = (catNow[t.category] || 0) + t.amount
-      }
-      if (ty === py && tm === pm) catPrev[t.category] = (catPrev[t.category] || 0) + t.amount
+      return d.getFullYear() === y ? d.getMonth() : null
     })
+    const dayB = bucketTotals(data.transactions, (t) => {
+      const d = new Date(t.date + 'T00:00:00')
+      return d.getFullYear() === y && d.getMonth() === m ? d.getDate() : null
+    })
+    const yearB = bucketTotals(data.transactions, (t) => new Date(t.date + 'T00:00:00').getFullYear())
 
-    const years = Object.keys(byYear)
-      .map(Number)
-      .sort((a, b) => a - b)
+    const months = Array.from({ length: 12 }, (_, i) => pick(monthB.get(i)))
+    const days = Array.from({ length: nd }, (_, i) => pick(dayB.get(i + 1)))
+    const years = [...yearB.keys()].sort((a, b) => a - b)
+    const byYear: Record<number, number> = {}
+    years.forEach((yy) => (byYear[yy] = pick(yearB.get(yy))))
+
+    // Категории: источники дохода (транзит → чистый остаток) или траты (без транзита).
+    const inMonth = (yy: number, mm: number) => (t: (typeof data.transactions)[number]) => {
+      const d = new Date(t.date + 'T00:00:00')
+      return d.getFullYear() === yy && d.getMonth() === mm
+    }
+    const sources = view === 'Доход' ? getIncomeSources : getExpenseSources
+    const catNow = sources(data.transactions.filter(inMonth(y, m)))
+    const catPrev = sources(data.transactions.filter(inMonth(py, pm)))
 
     const total = Object.values(catNow).reduce((s, v) => s + v, 0)
     const cats: CatRow[] = Object.keys(catNow)

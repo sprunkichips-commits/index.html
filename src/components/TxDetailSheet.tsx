@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ArrowLeftRight, Trash2 } from 'lucide-react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
 import { CategoryIcon } from './CategoryIcon'
@@ -55,6 +55,11 @@ export function TxDetailSheet({ tx, onClose }: { tx: Tx | null; onClose: () => v
             >
               {typeLabel(t.type)}
             </span>
+            {t.transit ? (
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-line/[0.08] px-2.5 py-0.5 text-xs font-semibold text-sub">
+                <ArrowLeftRight size={12} /> Transit — net only in stats
+              </span>
+            ) : null}
             <div className={cn('mono mt-3 text-3xl font-bold', inc ? 'text-pos' : 'text-ink')}>
               {inc ? '+' : '−'}
               {rub(t.amount)}

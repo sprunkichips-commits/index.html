@@ -1,5 +1,6 @@
 // ===== Модель данных, категории, валидация, агрегаты =====
 // Формат обратно совместим с исходным приложением — старые записи открываются как есть.
+import { bucketTotals, getExpenseSources, periodTotals } from './breakdown'
 
 export type TxType = 'Доход' | 'Расход'
 
@@ -9,6 +10,7 @@ export interface Tx {
   type: TxType
   category: string // верхний уровень (стабильный ключ, напр. 'Продукты')
   subCategory?: string // опц. подкатегория (SubCategory.id, напр. 'groc-meat')
+  transit?: boolean // «транзит»: деньги проходят насквозь, в разбивке учитывается только остаток
   amount: number
   note: string
   createdAt?: number // epoch ms — когда операция была добавлена (опц., для старых записей нет)
@@ -247,6 +249,7 @@ export function sanitize(o: unknown): AppData | null {
         type: t.type === 'Доход' ? 'Доход' : 'Расход',
         category: clampStr(t.category || 'Прочие расходы', CAT_MAX),
         ...(sub ? { subCategory: sub } : {}),
+        ...(t.transit === true ? { transit: true } : {}),
         amount: clampAmt(t.amount),
         note: clampStr(t.note || '', NOTE_MAX),
         ...(ca ? { createdAt: ca } : {}),
@@ -344,32 +347,23 @@ export function computeStats(data: AppData, cursor: Cursor): Stats {
     return d.getFullYear() === y && d.getMonth() === m
   }
   const mt = tx.filter(inM)
-  let income = 0
-  let expense = 0
-  mt.forEach((t) => {
-    if (t.type === 'Доход') income += t.amount
-    else expense += t.amount
-  })
+  // Доход/расход/баланс за месяц с зачётом транзита (net сохраняется точно).
+  const { income, expense } = periodTotals(mt)
   const net = income - expense
   const rate = income > 0 ? (net / income) * 100 : 0
 
+  // Помесячные бары этого года — транзит зачитывается внутри каждого месяца.
+  const monthBuckets = bucketTotals(tx, (t) => {
+    const d = new Date(t.date + 'T00:00:00')
+    return d.getFullYear() === y ? d.getMonth() : null
+  })
   const monthly: MonthPoint[] = MS.map((label, mm) => {
-    let inc = 0
-    let exp = 0
-    tx.forEach((t) => {
-      const d = new Date(t.date + 'T00:00:00')
-      if (d.getFullYear() === y && d.getMonth() === mm) {
-        if (t.type === 'Доход') inc += t.amount
-        else exp += t.amount
-      }
-    })
-    return { label, in: inc, ex: exp }
+    const b = monthBuckets.get(mm)
+    return { label, in: b?.income || 0, ex: b?.expense || 0 }
   })
 
-  const cm: Record<string, number> = {}
-  mt.forEach((t) => {
-    if (t.type === 'Расход') cm[t.category] = (cm[t.category] || 0) + t.amount
-  })
+  // Категории расходов за месяц — транзитные траты исключены (см. getExpenseSources).
+  const cm = getExpenseSources(mt)
   const byCat: CatSlice[] = Object.keys(cm)
     .map((k) => ({ name: k, value: cm[k], color: cc(k) }))
     .sort((a, b) => b.value - a.value)
@@ -380,7 +374,7 @@ export function computeStats(data: AppData, cursor: Cursor): Stats {
   const adset: Record<number, number> = {}
   let ad = 0
   mt.forEach((t) => {
-    if (t.type === 'Расход') {
+    if (t.type === 'Расход' && !t.transit) {
       const dd = new Date(t.date + 'T00:00:00').getDate()
       daily[dd - 1].v += t.amount
       if (!adset[dd]) {
@@ -420,6 +414,10 @@ export const DEMO: AppData = {
     { id: uid(), date: '2026-06-26', type: 'Расход', category: 'Продукты', subCategory: 'groc-veg', amount: 1450, note: 'Market' },
     { id: uid(), date: '2026-06-28', type: 'Расход', category: 'Продукты', subCategory: 'groc-snacks', amount: 640, note: 'Snacks' },
     { id: uid(), date: '2026-06-29', type: 'Расход', category: 'Продукты', amount: 500, note: 'Corner store' },
+    // Транзит: дали 5000, 2700 передал дальше, 2300 оставил себе. В «Income
+    // sources» попадёт только чистый остаток (+2300 в «Family»), не 5000.
+    { id: uid(), date: '2026-06-20', type: 'Доход', category: 'Близкие', transit: true, amount: 5000, note: 'Cash to pass on' },
+    { id: uid(), date: '2026-06-20', type: 'Расход', category: 'Прочие расходы', transit: true, amount: 2700, note: 'Passed on' },
   ],
   investments: [],
 }
