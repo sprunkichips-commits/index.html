@@ -3,6 +3,50 @@ import * as RS from '@radix-ui/react-select'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+/**
+ * Гасит ровно один следующий клик. Когда экранная клавиатура закрывается,
+ * система всё равно досылает click по исходной точке касания — а она уже
+ * указывает на другой элемент. Такой клик воспринимался как «нажатие мимо
+ * списка», и список закрывался сразу после открытия.
+ */
+function swallowNextClick() {
+  const swallow = (ev: Event) => {
+    ev.preventDefault()
+    ev.stopPropagation()
+  }
+  window.addEventListener('click', swallow, { capture: true, once: true })
+  // Предохранитель: если клик не пришёл — снимаем обработчик, чтобы он не
+  // «съел» следующее осмысленное нажатие пользователя.
+  window.setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 800)
+}
+
+/**
+ * Ждёт, пока размер видимой области перестанет меняться (клавиатура доехала),
+ * и только тогда выполняет действие. Без этого список открывается посреди
+ * анимации, экран под ним уезжает — и он тут же схлопывается.
+ */
+function waitForViewportSettle(done: () => void) {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null
+  if (!vv) {
+    window.setTimeout(done, 260) // старый браузер — просто ждём фиксированную паузу
+    return
+  }
+  let timer = 0
+  const finish = () => {
+    window.clearTimeout(timer)
+    window.clearTimeout(guard)
+    vv.removeEventListener('resize', onResize)
+    done()
+  }
+  const onResize = () => {
+    window.clearTimeout(timer)
+    timer = window.setTimeout(finish, 120) // 120 мс тишины = движение закончилось
+  }
+  vv.addEventListener('resize', onResize)
+  // Клавиатуры может не быть вовсе (внешняя, планшет) — не зависаем навсегда.
+  const guard = window.setTimeout(finish, 450)
+}
+
 export function Select({
   value,
   onValueChange,
@@ -40,18 +84,13 @@ export function Select({
 
     e.preventDefault()
     e.stopPropagation()
+    swallowNextClick()
+    ae.blur() // клавиатура начинает закрываться
 
-    const swallow = (ev: Event) => {
-      ev.preventDefault()
-      ev.stopPropagation()
-    }
-    // Ловим на фазе перехвата, чтобы клик не дошёл ни до Radix, ни до страницы.
-    window.addEventListener('click', swallow, { capture: true, once: true })
-    // Страховка: если клика так и не случилось — снимаем обработчик, иначе он
-    // «съел» бы следующее осмысленное нажатие пользователя.
-    window.setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 700)
-
-    setOpen(true)
+    // Открываем список ТОЛЬКО после того, как вёрстка перестала двигаться.
+    // Две прошлые попытки открывали его сразу — и он закрывался сам, потому
+    // что запоздалый клик прилетал уже по сместившемуся экрану.
+    waitForViewportSettle(() => setOpen(true))
   }
 
   return (
