@@ -8,6 +8,7 @@
 
 import { Hono } from 'hono'
 import { telegramAuth, type AuthEnv } from './auth'
+import { importBackup } from './import'
 import {
   getCategoryStats,
   getMonthlyTotals,
@@ -198,6 +199,22 @@ app.delete('/api/transactions/:id', async (c) => {
     .run()
   if (!res.meta.changes) return c.json({ error: 'not_found' }, 404)
   return c.json({ ok: true })
+})
+
+// ---------- Перенос данных из бэкапа ----------
+// Принимает файл, который отдаёт «Settings → Download file». Импорт только
+// добавляет записи и не создаёт дублей при повторной загрузке того же файла.
+
+app.post('/api/import', async (c) => {
+  const userId = c.get('userId')
+  let payload: unknown
+  try {
+    payload = await c.req.json()
+  } catch {
+    return c.json(badRequest('invalid JSON'), 400)
+  }
+  const report = await importBackup(c.env.DB, userId, payload)
+  return c.json(report)
 })
 
 // ---------- Статистика (агрегация в SQL) ----------

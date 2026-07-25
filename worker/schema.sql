@@ -52,6 +52,39 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_user_date     ON transactions(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_tx_user_cat_date ON transactions(user_id, category_id, date);
 
+-- ---------- Цели и ежедневные привычки ----------
+-- Большая цель со сроком: «набрать 10k подписчиков к 1 сентября».
+CREATE TABLE IF NOT EXISTS goals (
+  id          TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  title       TEXT    NOT NULL,
+  target_date TEXT    NOT NULL,      -- 'YYYY-MM-DD'
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id, target_date);
+
+-- Ежедневные задачи (English / Reading / YouTube).
+CREATE TABLE IF NOT EXISTS daily_tasks (
+  id         TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  title      TEXT    NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  archived   INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1))
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON daily_tasks(user_id, sort_order);
+
+-- Отметки выполнения по дням: одна строка = «задача закрыта в этот день».
+-- total_tasks — снимок числа задач на тот день, чтобы проценты за прошлое
+-- не менялись задним числом при добавлении новых задач.
+CREATE TABLE IF NOT EXISTS task_log (
+  user_id     INTEGER NOT NULL,
+  day         TEXT    NOT NULL,      -- 'YYYY-MM-DD'
+  task_id     TEXT    NOT NULL,
+  total_tasks INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day, task_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_log_user_day ON task_log(user_id, day);
+
 -- ---------- Наполнение справочников ----------
 -- id категорий совпадают с ключами на клиенте (см. src/lib/data.ts), чтобы
 -- перенос старых данных был однозначным.

@@ -110,6 +110,26 @@ npx wrangler d1 execute dengi-db --remote --file=worker/schema.sql
 npx wrangler secret put BOT_TOKEN
 ```
 
+### 3.5. Перенести данные
+
+В приложении: **Settings → Download file** — сохранится файл `dengi-backup-*.json`
+(финансы + цели). Затем на Cloudflare:
+
+```bash
+curl -X POST https://<адрес-воркера>/api/import \
+  -H "X-Telegram-Init-Data: <initData из приложения>" \
+  -H "Content-Type: application/json" \
+  --data-binary @dengi-backup-2026-07-25.json
+```
+
+Импорт **идемпотентен**: повторная загрузка того же файла не создаёт дублей
+(проверено). Ответ показывает, сколько записей перенесено, сколько пропущено и
+какие категории не распознались.
+
+Старые русские ключи категорий (`Продукты`, `Близкие`) автоматически
+переводятся в новые id (`groceries`, `family`). Операции с неизвестной
+категорией не теряются — попадают в «прочее» с предупреждением в отчёте.
+
 ### 4. Первый деплой
 
 ```bash

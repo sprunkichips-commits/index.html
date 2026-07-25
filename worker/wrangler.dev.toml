@@ -1,0 +1,26 @@
+# Конфиг ТОЛЬКО для локальной разработки и тестов бэкенда.
+# Боевой wrangler.toml в корне пока деплоит одну статику — база к нему
+# подключается отдельно, когда она создана в Cloudflare.
+#
+# Запуск:
+#   npx wrangler d1 execute dengi-db --local -c worker/wrangler.dev.toml --file=worker/schema.sql
+#   npx wrangler dev --local -c worker/wrangler.dev.toml --var ALLOW_DEV_USER:777001
+#
+# database_id здесь фиктивный: в режиме --local база живёт файлом на диске
+# (папка .wrangler), в Cloudflare этот конфиг не используется.
+
+name = "dengi-dev"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "../dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dengi-db"
+database_id = "local-dev-only-00000000-0000-0000-0000-000000000000"
