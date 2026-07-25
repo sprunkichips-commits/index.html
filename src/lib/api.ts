@@ -67,6 +67,13 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
         /* тело не JSON — оставляем общий текст */
       }
       if (res.status === 401) message = 'Telegram authorization failed'
+      // GitHub Pages отдаёт только файлы и на любой POST отвечает 405. Значит
+      // приложение открыто со старого адреса, а не с Cloudflare — говорим это
+      // прямо, иначе пользователь видит голый код ошибки и не понимает причину.
+      if (res.status === 405) {
+        message = `This copy of the app is opened from the old address (${location.host}) and cannot save to the cloud. Open it from the Cloudflare address.`
+        code = 'wrong_host'
+      }
       throw new ApiError(message, res.status, code)
     }
 

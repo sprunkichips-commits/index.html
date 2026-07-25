@@ -342,9 +342,13 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
         </Button>
       </div>
 
-      {/* Версия сборки: сверяй с последним коммитом на GitHub, чтобы понять,
-          подтянулось ли обновление (кэш Telegram/Pages живёт до ~10 минут). */}
-      <div className="mono mt-4 text-center text-[11px] text-faint">Version {__APP_VERSION__}</div>
+      {/* Версия сборки и адрес, с которого открыто приложение. Адрес важен:
+          со старого хостинга облачное сохранение не работает (там только файлы). */}
+      <div className="mono mt-4 text-center text-[11px] leading-relaxed text-faint">
+        Version {__APP_VERSION__}
+        <br />
+        {typeof location !== 'undefined' ? location.host : ''}
+      </div>
     </Sheet>
   )
 }
