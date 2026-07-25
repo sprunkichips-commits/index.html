@@ -51,9 +51,13 @@ function Shell() {
   return (
     <>
       <div className="app-bg" />
-      <div className="mx-auto flex min-h-full max-w-[1180px]">
+      {/* Раскладка: боковое меню прижато к левому краю, контент центрируется в
+          оставшемся пространстве и ограничен по ширине для читаемости. Раньше
+          вся оболочка была колонкой 1180px по центру — на широком экране
+          (полноэкранный режим на ПК) по краям оставались огромные пустые поля. */}
+      <div className="flex min-h-full w-full">
         <Sidebar onSettings={openSettings} />
-        <main className="min-w-0 flex-1 px-4 pb-28 pt-5 lg:px-8 lg:pb-10 lg:pt-7">
+        <main className="tg-safe-top mx-auto min-w-0 flex-1 px-4 pb-28 pt-5 lg:max-w-[1100px] lg:px-8 lg:pb-10 lg:pt-7">
           <header className="mb-5 flex items-center justify-between gap-2">
             {tab === 'goals' ? <div className="text-lg font-bold">Goals & habits</div> : <MonthSelector />}
             <div className="flex items-center gap-2">
