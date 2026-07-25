@@ -7,7 +7,16 @@
 // один Worker обслуживает и приложение, и API, поэтому CORS не нужен.
 
 import { Hono } from 'hono'
-import { telegramAuth, type AuthEnv } from './auth'
+import {
+  createSession,
+  readCookie,
+  readSession,
+  sessionCookie,
+  telegramAuth,
+  verifyLoginWidget,
+  SESSION_COOKIE,
+  type AuthEnv,
+} from './auth'
 import { importBackup } from './import'
 import {
   getCategoryStats,
@@ -22,6 +31,13 @@ type Env = AuthEnv & { Bindings: AuthEnv['Bindings'] & { ASSETS?: Fetcher } }
 const app = new Hono<Env>()
 
 // ---------- Утилиты ----------
+
+/** Проверка initData без выброса: возвращает id пользователя или null. */
+async function verifyInitDataSafe(initData: string, botToken: string): Promise<number | null> {
+  const { verifyInitData } = await import('./auth')
+  const r = await verifyInitData(initData, botToken)
+  return r.ok && r.user ? r.user.id : null
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MAX_AMOUNT_CENTS = 1e14 // ~1 трлн рублей — защита от мусора
@@ -64,6 +80,52 @@ function centsToRub(cents: number): number {
 
 app.get('/api/health', (c) =>
   c.json({ ok: true, ts: Date.now(), database: c.env.DB ? 'connected' : 'not_configured' }),
+)
+
+// ---------- Вход на сайте через Telegram Login Widget (без авторизации) ----------
+// Telegram перенаправляет сюда с подписанными данными пользователя. Проверяем
+// подпись и выдаём cookie сессии — дальше сайт работает как приложение внутри
+// Telegram и видит те же самые данные.
+
+app.get('/api/auth/telegram', async (c) => {
+  const params: Record<string, string> = {}
+  new URL(c.req.url).searchParams.forEach((v, k) => (params[k] = v))
+
+  const res = await verifyLoginWidget(params, c.env.BOT_TOKEN)
+  if (!res.ok || !res.user) {
+    return c.json({ error: 'unauthorized', reason: res.reason }, 401)
+  }
+  const token = await createSession(res.user.id, c.env.BOT_TOKEN)
+  // Возвращаем на главную уже с установленной cookie.
+  return new Response(null, {
+    status: 302,
+    headers: { Location: '/', 'Set-Cookie': sessionCookie(token) },
+  })
+})
+
+/** Кто я сейчас: есть ли действующий вход. Нужен сайту, чтобы решить,
+ *  показывать кнопку входа или сразу данные. */
+app.get('/api/auth/me', async (c) => {
+  const initData = c.req.header('X-Telegram-Init-Data') || ''
+  if (initData) {
+    const r = await verifyInitDataSafe(initData, c.env.BOT_TOKEN)
+    if (r) return c.json({ authenticated: true, userId: r, via: 'telegram' })
+  }
+  const token = readCookie(c.req.header('Cookie'), SESSION_COOKIE)
+  if (token) {
+    const userId = await readSession(token, c.env.BOT_TOKEN)
+    if (userId) return c.json({ authenticated: true, userId, via: 'session' })
+  }
+  return c.json({ authenticated: false }, 200)
+})
+
+app.post('/api/auth/logout', (c) =>
+  new Response(JSON.stringify({ ok: true }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Set-Cookie': `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
+    },
+  }),
 )
 
 // ---------- База ещё не привязана? Отвечаем понятно, а не падаем с 500 ----------

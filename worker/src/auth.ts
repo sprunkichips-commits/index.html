@@ -87,6 +87,80 @@ export async function verifyInitData(initData: string, botToken: string): Promis
   }
 }
 
+// ===== Вход на сайте (вне Telegram) =====
+// В обычном браузере initData нет, поэтому используется Telegram Login Widget:
+// пользователь жмёт «Войти через Telegram», Telegram присылает данные с подписью.
+// Схема подписи отличается от initData: ключ = SHA256(токен бота), без "WebAppData".
+
+const SESSION_DAYS = 30
+export const SESSION_COOKIE = 'dengi_session'
+
+async function sha256(data: string): Promise<ArrayBuffer> {
+  return crypto.subtle.digest('SHA-256', encoder.encode(data))
+}
+
+/** Проверяет данные Telegram Login Widget. */
+export async function verifyLoginWidget(
+  params: Record<string, string>,
+  botToken: string,
+): Promise<VerifyResult> {
+  const hash = params.hash
+  if (!hash) return { ok: false, reason: 'no hash' }
+  if (!botToken) return { ok: false, reason: 'server misconfigured: no bot token' }
+
+  const dataCheckString = Object.keys(params)
+    .filter((k) => k !== 'hash')
+    .sort()
+    .map((k) => `${k}=${params[k]}`)
+    .join('\n')
+
+  const secret = await sha256(botToken)
+  const expected = toHex(await hmacSha256(new Uint8Array(secret), dataCheckString))
+  if (!timingSafeEqual(expected, hash)) return { ok: false, reason: 'bad signature' }
+
+  const authDate = Number(params.auth_date || 0)
+  if (!authDate || Math.floor(Date.now() / 1000) - authDate > MAX_AGE_SECONDS) {
+    return { ok: false, reason: 'login expired' }
+  }
+  const id = Number(params.id)
+  if (!Number.isFinite(id)) return { ok: false, reason: 'no user id' }
+  return { ok: true, user: { id, first_name: params.first_name, username: params.username } }
+}
+
+/** Подписанный маркер сессии: "userId.срок.подпись". Секрет — токен бота. */
+export async function createSession(userId: number, botToken: string): Promise<string> {
+  const payload = `${userId}.${Date.now() + SESSION_DAYS * 86400_000}`
+  const sig = toHex(await hmacSha256(encoder.encode(botToken), payload))
+  return `${payload}.${sig}`
+}
+
+/** Разбирает маркер сессии; возвращает id пользователя или null. */
+export async function readSession(token: string, botToken: string): Promise<number | null> {
+  const parts = token.split('.')
+  if (parts.length !== 3 || !botToken) return null
+  const [idStr, expStr, sig] = parts
+  const expected = toHex(await hmacSha256(encoder.encode(botToken), `${idStr}.${expStr}`))
+  if (!timingSafeEqual(expected, sig)) return null
+  if (!(Number(expStr) > Date.now())) return null
+  const id = Number(idStr)
+  return Number.isFinite(id) ? id : null
+}
+
+export function sessionCookie(token: string): string {
+  // HttpOnly — недоступна скриптам (защита от кражи через XSS);
+  // Secure + SameSite=Lax — не уходит на чужие сайты и только по HTTPS.
+  return `${SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}`
+}
+
+export function readCookie(header: string | undefined, name: string): string {
+  if (!header) return ''
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=')
+    if (k === name) return v.join('=')
+  }
+  return ''
+}
+
 export interface AuthEnv {
   Bindings: { DB: D1Database; BOT_TOKEN: string; ALLOW_DEV_USER?: string }
   Variables: { userId: number; user: TgUser }
@@ -101,8 +175,26 @@ export interface AuthEnv {
  * попадают в логи и историю, а initData — чувствительная строка).
  */
 export const telegramAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
+  // Способ 1: приложение внутри Telegram присылает подписанный initData.
   const initData = c.req.header('X-Telegram-Init-Data') || ''
-  const res = await verifyInitData(initData, c.env.BOT_TOKEN)
+  const res = initData
+    ? await verifyInitData(initData, c.env.BOT_TOKEN)
+    : { ok: false as const, reason: 'no initData' }
+
+  // Способ 2: сайт в обычном браузере — cookie сессии, выданная после входа
+  // через Telegram Login Widget. Данные те же самые: владелец один и тот же
+  // Telegram-аккаунт, поэтому и там и там виден один набор операций.
+  if (!res.ok) {
+    const token = readCookie(c.req.header('Cookie'), SESSION_COOKIE)
+    if (token) {
+      const userId = await readSession(token, c.env.BOT_TOKEN)
+      if (userId) {
+        c.set('userId', userId)
+        c.set('user', { id: userId })
+        return next()
+      }
+    }
+  }
 
   if (!res.ok || !res.user) {
     // Локальная разработка: разрешаем фиктивного пользователя, только если это
