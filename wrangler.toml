@@ -20,23 +20,17 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-# ---------- База данных D1 (пока ОТКЛЮЧЕНА) ----------
-# Сейчас деплоится только статика: приложение работает на локальном хранилище,
-# как и раньше, а /api/* честно отвечает 503 «база не подключена».
+# ---------- База данных D1 ----------
+# Привязка обязана быть объявлена здесь: при деплое конфиг из репозитория
+# перезаписывает биндинги воркера, поэтому база, добавленная только в панели,
+# была бы стёрта следующей сборкой.
 #
-# Привязать базу, когда будешь готов запускать бэкенд:
-#   1) npx wrangler d1 create dengi-db          -> напечатает database_id
-#   2) раскомментировать блок ниже и вставить этот id
-#   3) npx wrangler d1 execute dengi-db --remote --file=worker/schema.sql
-#   4) npx wrangler secret put BOT_TOKEN
-#
-# Пока id не существует, wrangler deploy падает с ошибкой привязки —
-# именно поэтому блок закомментирован.
-#
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "dengi-db"
-# database_id = "ВСТАВЬ_СЮДА_ID_ИЗ_ШАГА_1"
+# database_id — не секрет, это публичный идентификатор базы внутри аккаунта.
+# Доступ к данным даёт не он, а права аккаунта Cloudflare.
+[[d1_databases]]
+binding = "DB"
+database_name = "dengi-db"
+database_id = "90d7e150-8eac-4542-8083-56116345180d"
 
 [observability]
 enabled = true
