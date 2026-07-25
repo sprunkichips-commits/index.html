@@ -163,8 +163,28 @@ function periodQuery(p?: Period): string {
 
 // ---------- Методы ----------
 
+/** Счётчики переноса. duplicates — «уже было в базе» (повторная отправка). */
+export interface ImportCounts {
+  imported: number
+  duplicates: number
+  skipped: number
+}
+
+/** Отчёт переноса: сколько записей ушло в базу, сколько уже было, сколько пропущено. */
+export interface ImportReport {
+  transactions: ImportCounts
+  goals: ImportCounts
+  tasks: ImportCounts
+  taskLog: ImportCounts
+  warnings: string[]
+}
+
 export const api = {
-  health: () => request<{ ok: boolean; ts: number }>('/api/health'),
+  health: () => request<{ ok: boolean; ts: number; database?: string }>('/api/health'),
+
+  /** Переносит бэкап (финансы + цели) в облако. Повторный вызов не дублирует. */
+  importBackup: (payload: unknown) =>
+    request<ImportReport>('/api/import', { method: 'POST', body: payload, timeoutMs: 60000 }),
 
   categories: (signal?: AbortSignal) =>
     request<{ categories: ApiCategory[]; subcategories: ApiSubCategory[] }>('/api/categories', { signal }),

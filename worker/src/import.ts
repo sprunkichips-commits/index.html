@@ -42,11 +42,19 @@ const FALLBACK = { income: 'other-income', expense: 'other-expense' }
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/
 
+/** Счётчики по каждому виду записей. duplicates — «уже было в базе»:
+ *  без него ноль в отчёте читался бы двусмысленно (не перенеслось или уже есть). */
+export interface ImportCounts {
+  imported: number
+  duplicates: number
+  skipped: number
+}
+
 export interface ImportReport {
-  transactions: { imported: number; skipped: number; duplicates: number }
-  goals: { imported: number; skipped: number }
-  tasks: { imported: number; skipped: number }
-  taskLog: { imported: number }
+  transactions: ImportCounts
+  goals: ImportCounts
+  tasks: ImportCounts
+  taskLog: ImportCounts
   warnings: string[]
 }
 
@@ -63,10 +71,10 @@ function toCents(v: unknown): number | null {
  */
 export async function importBackup(db: D1Database, userId: number, payload: unknown): Promise<ImportReport> {
   const report: ImportReport = {
-    transactions: { imported: 0, skipped: 0, duplicates: 0 },
-    goals: { imported: 0, skipped: 0 },
-    tasks: { imported: 0, skipped: 0 },
-    taskLog: { imported: 0 },
+    transactions: { imported: 0, duplicates: 0, skipped: 0 },
+    goals: { imported: 0, duplicates: 0, skipped: 0 },
+    tasks: { imported: 0, duplicates: 0, skipped: 0 },
+    taskLog: { imported: 0, duplicates: 0, skipped: 0 },
     warnings: [],
   }
   if (!payload || typeof payload !== 'object') {
@@ -173,7 +181,10 @@ export async function importBackup(db: D1Database, userId: number, payload: unkn
     )
   }
   if (goalStmts.length) {
-    for (const r of await db.batch(goalStmts)) if (r.meta.changes > 0) report.goals.imported++
+    for (const r of await db.batch(goalStmts)) {
+      if (r.meta.changes > 0) report.goals.imported++
+      else report.goals.duplicates++
+    }
   }
 
   // ---------- Ежедневные задачи ----------
@@ -199,7 +210,10 @@ export async function importBackup(db: D1Database, userId: number, payload: unkn
     )
   })
   if (taskStmts.length) {
-    for (const r of await db.batch(taskStmts)) if (r.meta.changes > 0) report.tasks.imported++
+    for (const r of await db.batch(taskStmts)) {
+      if (r.meta.changes > 0) report.tasks.imported++
+      else report.tasks.duplicates++
+    }
   }
 
   // ---------- Отметки выполнения по дням ----------
@@ -223,7 +237,10 @@ export async function importBackup(db: D1Database, userId: number, payload: unkn
     }
   }
   if (logStmts.length) {
-    for (const r of await db.batch(logStmts)) if (r.meta.changes > 0) report.taskLog.imported++
+    for (const r of await db.batch(logStmts)) {
+      if (r.meta.changes > 0) report.taskLog.imported++
+      else report.taskLog.duplicates++
+    }
   }
 
   return report

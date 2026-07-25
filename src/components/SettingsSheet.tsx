@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
-import { BarChart3, Copy, Download, FileSpreadsheet, History, Moon, Sun, Target, TrendingUp, Trash2, Upload } from 'lucide-react'
+import { BarChart3, CloudUpload, Copy, Download, FileSpreadsheet, History, Loader2, Moon, Sun, Target, TrendingUp, Trash2, Upload } from 'lucide-react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
 import { Textarea } from './ui/input'
 import { useStore } from '@/store/StoreContext'
 import { useGoals } from '@/store/GoalsContext'
+import { api, ApiError, hasApiAuth, type ImportReport } from '@/lib/api'
 import { hasCloud, tgUserId } from '@/lib/telegram'
 import { today } from '@/lib/format'
 import { fmtDateLong } from '@/lib/format'
@@ -18,6 +19,12 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const goals = useGoals()
   const [text, setText] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  // Состояние переноса в облако: idle → sending → отчёт или ошибка.
+  const [upload, setUpload] = useState<{ busy: boolean; report: ImportReport | null; error: string | null }>({
+    busy: false,
+    report: null,
+    error: null,
+  })
 
   // Дата самого свежего автоснимка (финансы/цели) — пересчитываем при открытии.
   const snapDate = useMemo(() => {
@@ -39,6 +46,30 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   function exportGoalsCsv() {
     const ok = downloadText('goals-' + today() + '.csv', goalsCsv(goals.data))
     toast(ok ? 'CSV downloaded' : 'Could not download')
+  }
+
+  /**
+   * Перенос данных в облако. Отправляет тот же набор, что и файл бэкапа,
+   * прямо из приложения — подпись Telegram уже есть, руками ничего доставать
+   * не нужно. Локальные данные остаются на месте: это копирование, не переезд.
+   */
+  async function uploadToCloud() {
+    // Цели расшифровываются асинхронно. Если отправить раньше готовности,
+    // они уйдут пустыми, а отчёт покажет «Goals: 0» — будто их нет вовсе.
+    if (goals.status !== 'ready') return
+    setUpload({ busy: true, report: null, error: null })
+    try {
+      const report = await api.importBackup({ ...data, goals: goals.data })
+      setUpload({ busy: false, report, error: null })
+    } catch (e) {
+      const msg =
+        e instanceof ApiError && e.status === 503
+          ? 'Database is not connected on the server yet'
+          : e instanceof ApiError
+            ? e.message
+            : 'Something went wrong'
+      setUpload({ busy: false, report: null, error: msg })
+    }
   }
 
   async function restoreFromSnapshot() {
@@ -177,6 +208,75 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           <Copy size={15} /> Copy
         </Button>
       </div>
+
+      {/* Перенос в облако Cloudflare. Виден только в Telegram: без подписи
+          сервер откажет в доступе. Копирует данные, локальные не трогает. */}
+      {hasApiAuth() && (
+        <>
+          <div className={cn(cap, 'mb-2')}>Cloud storage</div>
+          <p className="mb-2 text-[13px] leading-relaxed text-sub">
+            Copy transactions and goals to the server. Your data on this device stays as it is —
+            nothing is deleted, and repeating this does not create duplicates.
+          </p>
+          <Button
+            variant="soft"
+            className="w-full"
+            onClick={uploadToCloud}
+            disabled={upload.busy || goals.status !== 'ready'}
+          >
+            {upload.busy ? (
+              <>
+                <Loader2 size={15} className="animate-spin" /> Uploading…
+              </>
+            ) : goals.status !== 'ready' ? (
+              <>
+                <Loader2 size={15} className="animate-spin" /> Preparing…
+              </>
+            ) : (
+              <>
+                <CloudUpload size={15} /> Upload to cloud
+              </>
+            )}
+          </Button>
+
+          {upload.error && (
+            <div className="mt-2 rounded-xl border border-neg/30 bg-neg/10 px-3 py-2 text-[13px] text-neg">
+              {upload.error}
+            </div>
+          )}
+
+          {upload.report && (
+            <div className="mt-2 rounded-xl border border-line/12 bg-line/[0.04] px-3 py-2.5 text-[13px]">
+              <div className="font-semibold text-pos">Uploaded</div>
+              <div className="mt-1 space-y-0.5 text-sub">
+                {(
+                  [
+                    ['Transactions', upload.report.transactions],
+                    ['Goals', upload.report.goals],
+                    ['Daily tasks', upload.report.tasks],
+                    ['Check-ins', upload.report.taskLog],
+                  ] as const
+                ).map(([label, c]) => (
+                  <div key={label}>
+                    {label}: {c.imported} new
+                    {c.duplicates > 0 && `, ${c.duplicates} already there`}
+                    {c.skipped > 0 && `, ${c.skipped} skipped`}
+                  </div>
+                ))}
+              </div>
+              {upload.report.warnings.length > 0 && (
+                <ul className="mt-1.5 list-inside list-disc text-xs text-faint">
+                  {upload.report.warnings.slice(0, 5).map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          <div className="my-5 h-px bg-line/10" />
+        </>
+      )}
 
       <div className={cn(cap, 'mb-2')}>Export to Excel (CSV)</div>
       <p className="mb-2 text-[13px] leading-relaxed text-sub">
