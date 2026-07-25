@@ -14,7 +14,7 @@ import { GKEY, KEY, readSnapshot } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll, toast } =
+  const { data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll, toast, cloud } =
     useStore()
   const goals = useGoals()
   const [text, setText] = useState('')
@@ -214,9 +214,22 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       {hasApiAuth() && (
         <>
           <div className={cn(cap, 'mb-2')}>Cloud storage</div>
+          <div
+            className={cn(
+              'mb-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px]',
+              cloud === 'synced' && 'border-pos/30 bg-pos/10 text-pos',
+              cloud === 'offline' && 'border-line/15 bg-line/[0.05] text-sub',
+              cloud === 'syncing' && 'border-line/15 bg-line/[0.05] text-sub',
+            )}
+          >
+            {cloud === 'syncing' && <Loader2 size={14} className="animate-spin" />}
+            {cloud === 'synced' && 'Synced with the cloud — same data on every device'}
+            {cloud === 'syncing' && 'Loading from the cloud…'}
+            {cloud === 'offline' && 'No connection — showing the last saved copy'}
+          </div>
           <p className="mb-2 text-[13px] leading-relaxed text-sub">
-            Copy transactions and goals to the server. Your data on this device stays as it is —
-            nothing is deleted, and repeating this does not create duplicates.
+            The cloud is the source of truth. A copy stays on this device so the app opens and
+            works without a connection; new entries need a connection to be saved.
           </p>
           <Button
             variant="soft"

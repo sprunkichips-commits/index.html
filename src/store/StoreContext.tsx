@@ -37,6 +37,8 @@ import {
   bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, sset,
 } from '@/lib/storage'
 import { localDateStr } from '@/lib/goals'
+import { api, hasApiAuth } from '@/lib/api'
+import { fullRange, toCloudPayload, toLocalTx } from '@/lib/cloudSync'
 import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 
 export type Theme = 'dark' | 'light'
@@ -64,6 +66,9 @@ interface AddInvInput {
   current: number
 }
 
+/** Состояние связи с облаком: облако — источник правды, локально — кэш чтения. */
+export type CloudState = 'off' | 'syncing' | 'synced' | 'offline'
+
 interface Store {
   data: AppData
   theme: Theme
@@ -72,6 +77,8 @@ interface Store {
   tab: Tab
   filter: Filter
   notice: string | null
+  cloud: CloudState
+  syncCloud: () => void
   firstName: string
   profile: Profile
   displayName: string
@@ -119,6 +126,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [filter, setFilter] = useState<Filter>('Все')
   const [notice, setNotice] = useState<string | null>(null)
   const [profile, setProfileState] = useState<Profile>(() => parseProfile(sget(PKEY)))
+  const [cloud, setCloud] = useState<CloudState>(() => (hasApiAuth() ? 'syncing' : 'off'))
   const toastTimer = useRef<number | null>(null)
   // Пользователь уже менял данные/профиль в этой сессии? Тогда поздняя
   // гидратация из облака НЕ должна затирать его правки (см. boot-эффект).
@@ -197,6 +205,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  /**
+   * Тянет операции из облака и заменяет ими локальные. Облако — источник
+   * правды: при расхождении побеждает оно. Локальная копия остаётся как кэш,
+   * чтобы приложение открывалось и работало на чтение без связи.
+   */
+  const syncCloud = useCallback(() => {
+    if (!hasApiAuth()) return
+    setCloud('syncing')
+    const { from, to } = fullRange()
+    api
+      .transactions({ from, to })
+      .then(({ items }) => {
+        const transactions = items.map(toLocalTx)
+        setData((prev) => {
+          const next = { ...prev, transactions }
+          sset(KEY, JSON.stringify(next)) // обновляем офлайн-кэш
+          return next
+        })
+        setCloud('synced')
+      })
+      .catch(() => {
+        // Нет связи или сервер недоступен — продолжаем работать на кэше.
+        setCloud('offline')
+      })
+  }, [])
+
   const addTx = useCallback(
     (input: AddTxInput): boolean => {
       const category = clampStr(input.category, CAT_MAX)
@@ -217,21 +251,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         note,
         createdAt: Date.now(),
       }
+      // Показываем сразу (не ждём сеть), затем отправляем в облако. Если
+      // отправка не прошла — честно говорим об этом и возвращаем состояние
+      // к тому, что реально лежит в облаке, чтобы на экране не осталось
+      // операции, которой на сервере нет.
       const next: AppData = { ...data, transactions: [tx, ...data.transactions] }
       const d = new Date(input.date + 'T00:00:00')
       setCursor({ y: d.getFullYear(), m: d.getMonth() })
       persist(next)
+
+      if (hasApiAuth()) {
+        api
+          .addTransaction(toCloudPayload({ ...input, category, subCategory, payer, note, amount }))
+          .then(() => {
+            setCloud('synced')
+            syncCloud()
+          })
+          .catch(() => {
+            setCloud('offline')
+            toast('No connection — not saved to the cloud')
+          })
+      }
       toast('Added')
       return true
     },
-    [data, persist, toast],
+    [data, persist, toast, syncCloud],
   )
 
   const delTx = useCallback(
     (id: string) => {
       persist({ ...data, transactions: data.transactions.filter((x) => x.id !== id) })
+      if (hasApiAuth()) {
+        api.deleteTransaction(id).catch(() => {
+          setCloud('offline')
+          toast('No connection — not deleted in the cloud')
+          syncCloud() // вернём то, что реально в облаке
+        })
+      }
     },
-    [data, persist],
+    [data, persist, toast, syncCloud],
   )
 
   const addInv = useCallback(
@@ -297,6 +355,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     booted.current = true
     applyTheme(theme)
     tgReady()
+    // Облако — источник правды. Кэш уже отрисован, тянем свежие данные поверх.
+    syncCloud()
     // Запись есть, но JSON не читается (порча/обрыв записи)? Прячем копию в
     // -bak: дальнейшие сохранения перезапишут KEY, а исходник останется.
     const rawLocal = sget(KEY)
@@ -351,6 +411,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       tab,
       filter,
       notice,
+      cloud,
+      syncCloud,
       firstName,
       profile,
       displayName,
@@ -372,7 +434,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast,
     }),
     [
-      data, theme, chartStyle, cursor, tab, filter, notice, firstName, profile, displayName,
+      data, theme, chartStyle, cursor, tab, filter, notice, cloud, syncCloud, firstName, profile, displayName,
       shiftMonth, toggleTheme, setTheme, setChartStyle, setProfile, addTx, delTx, addInv, delInv,
       restore, restoreSnapshot, loadDemo, clearAll, toast,
     ],
