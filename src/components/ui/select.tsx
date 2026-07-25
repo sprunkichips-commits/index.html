@@ -20,20 +20,38 @@ export function Select({
 }) {
   const [open, setOpen] = React.useState(false)
 
-  // iOS/Telegram: при открытой экранной клавиатуре первый тап по селекту лишь
-  // прятал её (blur сдвигал лист, «отложенный» клик WebKit промахивался мимо
-  // уехавшего триггера — список открывался со второго раза). Перехватываем
-  // касание на pointerdown — ДО потери фокуса инпутом: сами прячем клавиатуру
-  // и мгновенно открываем список; preventDefault гасит паразитный клик.
-  // Мышь (десктоп) идёт штатным путём Radix.
+  // iOS/Telegram: при открытой экранной клавиатуре первый тап по селекту только
+  // прятал её, а список открывался лишь со второго раза.
+  //
+  // Что происходит на самом деле: клавиатура сворачивается → вся вёрстка
+  // «подрастает» и уезжает вниз → запоздалый click прилетает уже по другому
+  // месту экрана. Radix считает его нажатием ВНЕ списка и сразу закрывает то,
+  // что мы только что открыли. Поэтому мало открыть список — нужно погасить
+  // этот единственный паразитный клик.
+  //
+  // Фокус у инпута не забираем вручную: Radix сам переведёт его в список, и
+  // клавиатура закроется штатно, уже после открытия.
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.pointerType === 'mouse') return
     const ae = document.activeElement
-    if (ae instanceof HTMLElement && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) {
-      e.preventDefault()
-      ae.blur()
-      setOpen(true)
+    const keyboardOpen =
+      ae instanceof HTMLElement && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')
+    if (!keyboardOpen) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    const swallow = (ev: Event) => {
+      ev.preventDefault()
+      ev.stopPropagation()
     }
+    // Ловим на фазе перехвата, чтобы клик не дошёл ни до Radix, ни до страницы.
+    window.addEventListener('click', swallow, { capture: true, once: true })
+    // Страховка: если клика так и не случилось — снимаем обработчик, иначе он
+    // «съел» бы следующее осмысленное нажатие пользователя.
+    window.setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 700)
+
+    setOpen(true)
   }
 
   return (

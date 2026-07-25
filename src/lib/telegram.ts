@@ -19,6 +19,10 @@ export interface TgWebApp {
   initDataUnsafe?: { user?: TgUser }
   colorScheme?: 'light' | 'dark'
   CloudStorage?: TgCloudStorage
+  /** Отступы системных элементов экрана (статус-бар, вырез камеры). Bot API 8.0+. */
+  safeAreaInset?: { top: number; bottom: number; left: number; right: number }
+  /** Отступы элементов самого Telegram (кнопки «Закрыть», «…»). Bot API 8.0+. */
+  contentSafeAreaInset?: { top: number; bottom: number; left: number; right: number }
   showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void
   setBackgroundColor?: (color: string) => void
   setHeaderColor?: (color: string) => void
@@ -56,11 +60,38 @@ export const tgUser: TgUser | null = (() => {
 
 export const tgUserId: number | null = tgUser ? tgUser.id : null
 
+/**
+ * Прокидывает отступы безопасных зон Telegram в CSS-переменную --tg-top.
+ *
+ * В полноэкранном режиме сверху накладываются две вещи: системные элементы
+ * телефона (статус-бар, вырез) и кнопки самого Telegram («Закрыть», «…»).
+ * Полагаться только на CSS env(safe-area-inset-top) нельзя — он знает про вырез,
+ * но не про кнопки Telegram, из-за чего шапка приложения уезжала под них.
+ * Значения приходят из API и обновляются при повороте экрана.
+ */
+function applySafeArea() {
+  if (!TG) return
+  try {
+    const sys = TG.safeAreaInset?.top ?? 0
+    const content = TG.contentSafeAreaInset?.top ?? 0
+    // Отступы складываются: сначала системная зона, внутри неё — кнопки Telegram.
+    const top = Math.max(0, sys + content)
+    document.documentElement.style.setProperty('--tg-top', `${top}px`)
+  } catch {
+    /* noop */
+  }
+}
+
 export function tgReady() {
   if (!TG) return
   try {
     TG.ready()
     TG.expand()
+    applySafeArea()
+    // Значения приходят асинхронно и меняются при повороте/разворачивании.
+    TG.onEvent?.('safeAreaChanged', applySafeArea)
+    TG.onEvent?.('contentSafeAreaChanged', applySafeArea)
+    TG.onEvent?.('viewportChanged', applySafeArea)
   } catch {
     /* noop */
   }
