@@ -20,15 +20,23 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-# ---------- База данных D1 ----------
-# database_id заполняется ОДИН раз после создания базы:
-#   npx wrangler d1 create dengi-db
-# команда напечатает id — вставить его сюда вместо PASTE_DATABASE_ID_HERE.
-# Пока id не вставлен, деплой будет падать — это ожидаемо.
-[[d1_databases]]
-binding = "DB"
-database_name = "dengi-db"
-database_id = "PASTE_DATABASE_ID_HERE"
+# ---------- База данных D1 (пока ОТКЛЮЧЕНА) ----------
+# Сейчас деплоится только статика: приложение работает на локальном хранилище,
+# как и раньше, а /api/* честно отвечает 503 «база не подключена».
+#
+# Привязать базу, когда будешь готов запускать бэкенд:
+#   1) npx wrangler d1 create dengi-db          -> напечатает database_id
+#   2) раскомментировать блок ниже и вставить этот id
+#   3) npx wrangler d1 execute dengi-db --remote --file=worker/schema.sql
+#   4) npx wrangler secret put BOT_TOKEN
+#
+# Пока id не существует, wrangler deploy падает с ошибкой привязки —
+# именно поэтому блок закомментирован.
+#
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "dengi-db"
+# database_id = "ВСТАВЬ_СЮДА_ID_ИЗ_ШАГА_1"
 
 [observability]
 enabled = true

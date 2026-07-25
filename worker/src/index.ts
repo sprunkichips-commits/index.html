@@ -61,7 +61,22 @@ function centsToRub(cents: number): number {
 
 // ---------- Проверка живости (без авторизации) ----------
 
-app.get('/api/health', (c) => c.json({ ok: true, ts: Date.now() }))
+app.get('/api/health', (c) =>
+  c.json({ ok: true, ts: Date.now(), database: c.env.DB ? 'connected' : 'not_configured' }),
+)
+
+// ---------- База ещё не привязана? Отвечаем понятно, а не падаем с 500 ----------
+// Пока блок [[d1_databases]] в wrangler.toml закомментирован, деплоится только
+// статика: приложение работает на локальном хранилище, а API сообщает 503.
+app.use('/api/*', async (c, next) => {
+  if (!c.env.DB) {
+    return c.json(
+      { error: 'database_not_configured', message: 'D1 database is not attached yet' },
+      503,
+    )
+  }
+  await next()
+})
 
 // ---------- Всё остальное под /api требует валидного Telegram initData ----------
 
