@@ -1,0 +1,34 @@
+# ===== Cloudflare Worker «Деньги» =====
+# Один Worker обслуживает и API (/api/*), и собранный фронтенд из dist/.
+# Поэтому CORS не нужен, а initData не ходит между разными доменами.
+#
+# ВАЖНО: файл попадает в публичный репозиторий — никаких секретов здесь.
+# Токен бота задаётся отдельно и хранится в Cloudflare:
+#   npx wrangler secret put BOT_TOKEN
+
+name = "dengi"
+main = "worker/src/index.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------- Статика (собранный Vite-фронтенд) ----------
+# run_worker_first: /api/* обрабатывает Worker, всё остальное отдаётся файлами.
+# not_found_handling: SPA — неизвестные пути возвращают index.html.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# ---------- База данных D1 ----------
+# database_id заполняется ОДИН раз после создания базы:
+#   npx wrangler d1 create dengi-db
+# команда напечатает id — вставить его сюда вместо PASTE_DATABASE_ID_HERE.
+# Пока id не вставлен, деплой будет падать — это ожидаемо.
+[[d1_databases]]
+binding = "DB"
+database_name = "dengi-db"
+database_id = "PASTE_DATABASE_ID_HERE"
+
+[observability]
+enabled = true

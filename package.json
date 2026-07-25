@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260724.1",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
@@ -27,6 +28,7 @@
     "@radix-ui/react-tabs": "^1.1.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "hono": "^4.12.32",
     "lucide-react": "^1.21.0",
     "recharts": "^3.9.0",
     "tailwind-merge": "^3.6.0"
