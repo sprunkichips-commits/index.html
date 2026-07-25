@@ -18,16 +18,15 @@ function buildVersion(): string {
 
 /**
  * База путей к ассетам зависит от хостинга:
- *   GitHub Pages — проект лежит в подпапке: https://<user>.github.io/index.html/
- *   Cloudflare   — сайт отдаётся из корня домена: /
- * Если базу не переключить, на Cloudflare все ссылки на JS/CSS ведут в
- * /index.html/assets/... — файлы не находятся и открывается белый экран.
+ *   Cloudflare   — сайт отдаётся из корня домена: /            (по умолчанию)
+ *   GitHub Pages — проект лежит в подпапке /index.html/        (задаётся явно)
  *
- * Определяется автоматически (Cloudflare выставляет свои переменные сборки),
- * либо принудительно через VITE_BASE, напр.: VITE_BASE=/ npm run build
+ * Если база не совпадает с хостингом, ссылки на JS/CSS ведут не туда, файлы
+ * не находятся и открывается белый экран. Поэтому значение НЕ угадывается по
+ * переменным окружения: по умолчанию корень, а старый хостинг закрепляет свой
+ * путь сам — см. VITE_BASE в .github/workflows/deploy.yml.
  */
-const BASE =
-  process.env.VITE_BASE || (process.env.WORKERS_CI || process.env.CF_PAGES ? '/' : '/index.html/')
+const BASE = process.env.VITE_BASE || '/'
 
 export default defineConfig({
   base: BASE,

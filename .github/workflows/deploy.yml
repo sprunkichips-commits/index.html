@@ -30,7 +30,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+        # GitHub Pages отдаёт проект из подпапки /index.html/, поэтому база
+        # задаётся явно. По умолчанию сборка идёт под корень домена (Cloudflare).
       - run: npm run build
+        env:
+          VITE_BASE: /index.html/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
