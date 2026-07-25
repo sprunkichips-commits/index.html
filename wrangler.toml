@@ -12,13 +12,18 @@ compatibility_date = "2026-07-01"
 compatibility_flags = ["nodejs_compat"]
 
 # ---------- Статика (собранный Vite-фронтенд) ----------
-# run_worker_first: /api/* обрабатывает Worker, всё остальное отдаётся файлами.
-# not_found_handling: SPA — неизвестные пути возвращают index.html.
+# run_worker_first = true: КАЖДЫЙ запрос сначала идёт в Worker, и только потом
+# он сам отдаёт файлы через биндинг ASSETS (см. app.notFound в src/index.ts).
+#
+# Почему не список путей вроде ["/api/*"]: слой статики Cloudflare умеет только
+# GET/HEAD и на POST отвечает 405 ещё до Worker'а — из-за этого падал перенос
+# данных (POST /api/import -> HTTP 405). Локально miniflare маршрутизирует
+# иначе, поэтому баг проявлялся только в бою.
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*"]
+run_worker_first = true
 
 # ---------- База данных D1 ----------
 # Привязка обязана быть объявлена здесь: при деплое конфиг из репозитория
