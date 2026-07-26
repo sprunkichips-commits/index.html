@@ -82,8 +82,17 @@ function centsToRub(cents: number): number {
  *  а токен остаётся на сервере. Нужен сайту, чтобы отрисовать кнопку входа. */
 app.get('/api/config', (c) => c.json({ botUsername: c.env.BOT_USERNAME ?? '' }))
 
+// Проверка настроек сервера одним запросом. Значений не отдаём — только факт
+// «задано / не задано»: без этого «authorization failed» невозможно отличить
+// от «на сервере нет токена бота».
 app.get('/api/health', (c) =>
-  c.json({ ok: true, ts: Date.now(), database: c.env.DB ? 'connected' : 'not_configured' }),
+  c.json({
+    ok: true,
+    ts: Date.now(),
+    database: c.env.DB ? 'connected' : 'not_configured',
+    botToken: c.env.BOT_TOKEN ? 'configured' : 'missing',
+    botUsername: c.env.BOT_USERNAME ? 'configured' : 'missing',
+  }),
 )
 
 // ---------- Вход на сайте через Telegram Login Widget (без авторизации) ----------

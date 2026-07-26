@@ -55,6 +55,29 @@ export async function resolveAuth(): Promise<AuthInfo> {
   }
 }
 
+/**
+ * Расшифровка 401 в понятный текст. Раньше здесь была одна строка
+ * «Telegram authorization failed» на все случаи — по ней нельзя было понять,
+ * что делать: перезапустить приложение, войти заново или дописать настройку
+ * на сервере. Причину присылает сам сервер в поле reason.
+ */
+function authFailureText(reason?: string): string {
+  const r = reason ?? ''
+  if (r.includes('no bot token')) {
+    return 'The server has no bot token yet (BOT_TOKEN), so it cannot check the Telegram signature.'
+  }
+  if (r.includes('bad signature')) {
+    return 'Telegram signature does not match. Most likely the server holds a token of a different bot than the one this app is opened from.'
+  }
+  if (r.includes('expired')) {
+    return 'The sign-in data has expired. Close the app and open it from the bot again.'
+  }
+  if (r.includes('no initData')) {
+    return 'Not signed in. Open the app from the bot, or sign in with Telegram on the website.'
+  }
+  return 'Telegram authorization failed' + (r ? ` (${r})` : '')
+}
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'DELETE'
   body?: unknown
@@ -89,15 +112,17 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
     if (!res.ok) {
       let code: string | undefined
+      let reason: string | undefined
       let message = `HTTP ${res.status}`
       try {
-        const err = (await res.json()) as { error?: string; message?: string }
+        const err = (await res.json()) as { error?: string; message?: string; reason?: string }
         code = err.error
+        reason = err.reason
         message = err.message || err.error || message
       } catch {
         /* тело не JSON — оставляем общий текст */
       }
-      if (res.status === 401) message = 'Telegram authorization failed'
+      if (res.status === 401) message = authFailureText(reason)
       // GitHub Pages отдаёт только файлы и на любой POST отвечает 405. Значит
       // приложение открыто со старого адреса, а не с Cloudflare — говорим это
       // прямо, иначе пользователь видит голый код ошибки и не понимает причину.
@@ -222,7 +247,14 @@ export const api = {
   /** Публичные настройки сервера (имя бота для кнопки входа). */
   config: () => request<{ botUsername: string }>('/api/config'),
 
-  health: () => request<{ ok: boolean; ts: number; database?: string }>('/api/health'),
+  health: () =>
+    request<{
+      ok: boolean
+      ts: number
+      database?: string
+      botToken?: 'configured' | 'missing'
+      botUsername?: 'configured' | 'missing'
+    }>('/api/health'),
 
   /** Переносит бэкап (финансы + цели) в облако. Повторный вызов не дублирует. */
   importBackup: (payload: unknown) =>
