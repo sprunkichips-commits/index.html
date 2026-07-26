@@ -1,3 +1,4 @@
+import { m, useReducedMotion } from 'framer-motion'
 import { ArrowLeftRight, Trash2 } from 'lucide-react'
 import { type Tx, catLabel, typeLabel } from '@/lib/data'
 import { rub } from '@/lib/format'
@@ -9,8 +10,12 @@ export function TxRow({
   tx,
   onDelete,
   onOpen,
+  divider,
 }: {
   tx: Tx
+  /** Разделитель сверху. Раньше его рисовала обёртка в каждом экране —
+   *  теперь он часть строки, чтобы при удалении уезжала вся строка целиком. */
+  divider?: boolean
   onDelete: (id: string) => void
   onOpen?: (tx: Tx) => void
 }) {
@@ -24,8 +29,20 @@ export function TxRow({
     )
     if (ok) onDelete(tx.id)
   }
+  const still = useReducedMotion()
+
   return (
-    <div className="group flex items-center gap-1">
+    // layout: соседние строки сдвигаются плавно, когда одну удалили.
+    // Появление и исчезновение — по высоте, иначе список дёргается.
+    <m.div
+      layout={still ? false : 'position'}
+      initial={still ? false : { opacity: 0, height: 0 }}
+      animate={still ? {} : { opacity: 1, height: 'auto' }}
+      exit={still ? {} : { opacity: 0, height: 0, transition: { duration: 0.18 } }}
+      transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+      className={cn('overflow-hidden', divider && 'border-t border-line/8')}
+    >
+      <div className="group flex items-center gap-1">
       <button
         type="button"
         onClick={() => onOpen?.(tx)}
@@ -55,6 +72,7 @@ export function TxRow({
       >
         <Trash2 size={16} />
       </button>
-    </div>
+      </div>
+    </m.div>
   )
 }

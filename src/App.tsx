@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence, LazyMotion, MotionConfig, m } from 'framer-motion'
 import { Loader2, Plus, Settings, ShieldAlert } from 'lucide-react'
 import { StoreProvider, useStore } from './store/StoreContext'
 import { GoalsProvider } from './store/GoalsContext'
@@ -23,14 +24,28 @@ import type { Tx, TxType } from './lib/data'
 // Мягкий клиентский UX-замок (не авторизация) — см. lib/telegram.ts
 const blocked = !!(OWNER_ID && tgUser && tgUser.id !== OWNER_ID)
 
+const loadMotionFeatures = () => import('./lib/motion-features').then((mod) => mod.default)
+
 export default function App() {
   if (blocked) return <Blocked />
   return (
-    <StoreProvider>
-      <GoalsProvider>
-        <Shell />
-      </GoalsProvider>
-    </StoreProvider>
+    // reducedMotion="user": если в системе включено «уменьшить движение»,
+    // framer-motion сам выключает перемещения во всём дереве. Отдельные
+    // компоненты дополнительно спрашивают useReducedMotion там, где вместо
+    // движения нужен другой вид перехода, а не его отсутствие.
+    // LazyMotion + m.*: в основную сборку попадают только лёгкие компоненты, а
+    // движок анимаций подгружается отдельным файлом после первого экрана.
+    // strict запрещает случайно использовать тяжёлый motion.* — иначе весь
+    // движок вернулся бы в стартовую загрузку и смысл разделения пропал.
+    <LazyMotion features={loadMotionFeatures} strict>
+      <MotionConfig reducedMotion="user">
+        <StoreProvider>
+          <GoalsProvider>
+            <Shell />
+          </GoalsProvider>
+        </StoreProvider>
+      </MotionConfig>
+    </LazyMotion>
   )
 }
 
@@ -107,10 +122,23 @@ function Shell() {
             </div>
           </header>
 
-          {tab === 'dash' && <Dashboard openAdd={openAdd} openProfile={openProfile} openDetail={openDetail} />}
-          {tab === 'tx' && <Transactions openAdd={openAdd} openDetail={openDetail} />}
-          {tab === 'stats' && <Stats />}
-          {tab === 'goals' && <Goals />}
+          {/* Смена вкладки: старый экран уходит, новый приезжает снизу.
+              mode="wait" — чтобы два экрана не накладывались друг на друга и
+              страница не прыгала по высоте во время перехода. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <m.div
+              key={tab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            >
+              {tab === 'dash' && <Dashboard openAdd={openAdd} openProfile={openProfile} openDetail={openDetail} />}
+              {tab === 'tx' && <Transactions openAdd={openAdd} openDetail={openDetail} />}
+              {tab === 'stats' && <Stats />}
+              {tab === 'goals' && <Goals />}
+            </m.div>
+          </AnimatePresence>
         </main>
       </div>
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, Pencil, Search, Wallet } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useStore } from '@/store/StoreContext'
 import { computeStats } from '@/lib/data'
 import { rub, rubS } from '@/lib/format'
@@ -142,11 +143,11 @@ export function Dashboard({
         {recent.length === 0 ? (
           <Empty onAdd={() => openAdd('Расход')} />
         ) : (
-          recent.map((t, i) => (
-            <div key={t.id} className={i ? 'border-t border-line/8' : ''}>
-              <TxRow tx={t} onDelete={delTx} onOpen={openDetail} />
-            </div>
-          ))
+          <AnimatePresence initial={false}>
+            {recent.map((t, i) => (
+              <TxRow key={t.id} tx={t} divider={i > 0} onDelete={delTx} onOpen={openDetail} />
+            ))}
+          </AnimatePresence>
         )}
       </Card>
     </div>

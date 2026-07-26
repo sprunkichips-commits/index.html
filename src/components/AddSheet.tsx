@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion'
 import { ArrowLeftRight, Check } from 'lucide-react'
-import { Sheet } from './ui/sheet'
+import { AdaptiveDialog } from './ui/adaptive-dialog'
 import { Button } from './ui/button'
+import { Collapse } from './ui/collapse'
+import { DatePicker } from './ui/date-picker'
 import { Input } from './ui/input'
 import { Select } from './ui/select'
 import { useStore } from '@/store/StoreContext'
@@ -83,6 +86,7 @@ export function AddSheet({
     setSubCategory('')
   }, [category])
 
+  const still = useReducedMotion()
   const accent = type === 'Доход' ? 'text-pos' : 'text-neg'
   const list = type === 'Доход' ? INCOME : EXPENSE
   const subs = subCategoriesOf(category)
@@ -97,22 +101,35 @@ export function AddSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="New transaction">
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-line/10 bg-line/[0.04] p-1">
+    <AdaptiveDialog open={open} onOpenChange={onOpenChange} title="New transaction">
+      {/* Переключатель типа: подложка не перекрашивается, а переезжает под
+          выбранную половину — движение показывает, что это одна вещь в двух
+          положениях, а не две отдельные кнопки. layoutId делает это одной
+          анимацией, без ручного расчёта смещений. */}
+      <div className="relative mb-4 grid grid-cols-2 gap-1 rounded-2xl border border-line/10 bg-line/[0.04] p-1">
         {(['Расход', 'Доход'] as TxType[]).map((t) => (
           <button
             key={t}
+            type="button"
             onClick={() => setType(t)}
-            className={cn(
-              'h-11 rounded-xl text-sm font-semibold transition active:scale-[.97]',
-              t === type
-                ? t === 'Доход'
-                  ? 'bg-pos text-white shadow-fab'
-                  : 'bg-neg text-white'
-                : 'text-sub hover:text-ink',
-            )}
+            aria-pressed={t === type}
+            className="relative h-11 rounded-xl text-sm font-semibold"
           >
-            {typeLabel(t)}
+            {t === type && (
+              <m.span
+                layoutId="txTypePill"
+                // Без shadow-fab: эта тень окрашена в акцентный лайм и под
+                // зелёной половиной выглядела чужим ореолом. Выделения хватает
+                // цветом самой подложки.
+                className={cn('absolute inset-0 rounded-xl', t === 'Доход' ? 'bg-pos' : 'bg-neg')}
+                transition={
+                  still ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 32, mass: 0.6 }
+                }
+              />
+            )}
+            <span className={cn('relative transition-colors', t === type ? 'text-white' : 'text-sub')}>
+              {typeLabel(t)}
+            </span>
           </button>
         ))}
       </div>
@@ -145,7 +162,7 @@ export function AddSheet({
       </div>
 
       {/* Подкатегория — только для категорий с детализацией (напр. Groceries) */}
-      {subs.length > 0 && (
+      <Collapse show={subs.length > 0}>
         <div className="mb-3">
           <Select
             value={subCategory}
@@ -156,27 +173,30 @@ export function AddSheet({
             ariaLabel="Subcategory"
           />
         </div>
-      )}
+      </Collapse>
 
       {/* «От кого» — свободный текст, только для дохода. Виден в детализации источника. */}
-      {type === 'Доход' && (
-        <>
-          <label className="mb-1.5 block text-xs font-medium text-sub">
-            From whom <span className="text-faint">(optional)</span>
-          </label>
-          <Input
-            type="text"
-            maxLength={PAYER_MAX}
-            placeholder="e.g. Mom, employer, client"
-            value={payer}
-            onChange={(e) => setPayer(e.target.value)}
-            className="mb-3"
-          />
-        </>
-      )}
+      <Collapse show={type === 'Доход'}>
+        <label className="mb-1.5 block text-xs font-medium text-sub">
+          From whom <span className="text-faint">(optional)</span>
+        </label>
+        <Input
+          type="text"
+          maxLength={PAYER_MAX}
+          placeholder="e.g. Mom, employer, client"
+          value={payer}
+          onChange={(e) => setPayer(e.target.value)}
+          className="mb-3"
+        />
+      </Collapse>
 
       <label className="mb-1.5 block text-xs font-medium text-sub">Date</label>
-      <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mb-3" />
+      <DatePicker
+        value={date}
+        onChange={setDate}
+        accent={type === 'Доход' ? 'pos' : 'neg'}
+        className="mb-3"
+      />
 
       <label className="mb-1.5 block text-xs font-medium text-sub">
         Note <span className="text-faint">(optional)</span>
@@ -222,6 +242,6 @@ export function AddSheet({
           Add
         </Button>
       </div>
-    </Sheet>
+    </AdaptiveDialog>
   )
 }

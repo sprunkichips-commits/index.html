@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Plus } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useStore, type Filter } from '@/store/StoreContext'
 import { rubS } from '@/lib/format'
 import { Card } from '@/components/ui/card'
@@ -94,11 +95,11 @@ export function Transactions({
                     {rubS(g.sum)}
                   </span>
                 </div>
-                {g.items.map((t, i) => (
-                  <div key={t.id} className={i ? 'border-t border-line/8' : ''}>
-                    <TxRow tx={t} onDelete={delTx} onOpen={openDetail} />
-                  </div>
-                ))}
+                <AnimatePresence initial={false}>
+                  {g.items.map((t, i) => (
+                    <TxRow key={t.id} tx={t} divider={i > 0} onDelete={delTx} onOpen={openDetail} />
+                  ))}
+                </AnimatePresence>
               </div>
             )
           })

@@ -46,6 +46,16 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             // recharts + d3 — тяжёлый и редко меняется: отдельным чанком для кэша
             if (/[\\/]node_modules[\\/](recharts|d3-|victory-vendor|internmap)/.test(id)) return 'recharts'
+            // vaul (шторка) — отдельным чанком: редко меняется, хорошо кэшируется.
+            if (/[\\/]node_modules[\\/]vaul/.test(id)) return 'motion'
+            // framer-motion оставляем на усмотрение Rollup (возврат undefined):
+            // движок анимаций подключается динамическим импортом
+            // (см. lib/motion-features), и общее правило «всё в vendor» тянуло
+            // бы его обратно в стартовую загрузку.
+            if (/[\\/]node_modules[\\/](framer-motion|motion-dom|motion-utils)/.test(id)) return undefined
+            // Календарь загружается по требованию (см. date-picker) — держим его
+            // отдельно, иначе он приедет вместе с общим vendor и смысла не будет.
+            if (/[\\/]node_modules[\\/]react-day-picker/.test(id)) return 'calendar'
             return 'vendor'
           }
         },
