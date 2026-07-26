@@ -12,6 +12,7 @@ import {
   type GoalsData,
   computeStreak,
   emptyGoals,
+  isGoalsEmpty,
   localDateStr,
   MAX_GOALS,
   MAX_TASKS,
@@ -89,6 +90,10 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
   // Пользователь уже менял цели в этой сессии? Тогда поздняя гидратация из
   // облака не должна затирать его правки (см. boot-эффект).
   const dirty = useRef(false)
+  // Предохранитель (как в StoreContext): не пишем в облако, пока не прочитали
+  // его успешно, и не затираем непустые цели пустыми.
+  const cloudLoadOk = useRef(false)
+  const cloudHadData = useRef(false)
   const todayKey = localDateStr()
 
   // Сохранение: всегда шифруем (если доступен Web Crypto), иначе — открытым текстом.
@@ -104,7 +109,16 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
         }
         dailySnapshot(GKEY, localDateStr())
         const okLocal = sset(GKEY, env)
+        const goalsEmpty = isGoalsEmpty(next)
         if (hasCloud) {
+          if (!cloudLoadOk.current) {
+            toast('Goals not loaded from cloud — saving paused to protect them')
+            return
+          }
+          if (cloudHadData.current && goalsEmpty) {
+            toast('Refused to overwrite your goals with an empty set')
+            return
+          }
           if (!(await bigSet('goals', env))) toast('Saved on device; Telegram sync failed')
         } else if (!okLocal) {
           toast('Storage is full — download a backup now!')
@@ -146,15 +160,24 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
       let envStr = sget(GKEY)
       let fromCloud = false
       if (hasCloud) {
-        const cloudStr = await bigGet('goals')
-        if (cloudStr) {
-          envStr = cloudStr
-          sset(GKEY, cloudStr)
-          fromCloud = true
+        try {
+          const cloudStr = await bigGet('goals')
+          cloudLoadOk.current = true
+          if (cloudStr) {
+            envStr = cloudStr
+            sset(GKEY, cloudStr)
+            fromCloud = true
+          }
+        } catch {
+          // Чтение не удалось — предохранитель остаётся включённым.
+          toast('Could not read goals from cloud — saving paused')
         }
+      } else {
+        cloudLoadOk.current = true // облака нет — защищать нечего
       }
 
       const loaded = await loadFrom(envStr, key)
+      cloudHadData.current = fromCloud && !isGoalsEmpty(loaded.data)
 
       if (loaded.failed && envStr) {
         // Запись есть, но прочитать не смогли (сбой ключа/повреждение). Прячем

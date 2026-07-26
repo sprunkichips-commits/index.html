@@ -79,6 +79,8 @@ interface Store {
   notice: string | null
   cloud: CloudState
   syncCloud: () => void
+  /** Заметное предупреждение: запись в облако заблокирована предохранителем. */
+  dataGuard: string | null
   firstName: string
   profile: Profile
   displayName: string
@@ -133,6 +135,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const dataDirty = useRef(false)
   const profileDirty = useRef(false)
 
+  // ----- ПРЕДОХРАНИТЕЛЬ ОТ ПОТЕРИ ДАННЫХ -----
+  // Настоящая история операций может лежать только в Telegram CloudStorage.
+  // Если приложение запустится, не прочитав её (нет связи, сбой, пустая база
+  // D1), в памяти окажется пустота — и первая же запись затрёт историю
+  // безвозвратно. Поэтому в облако не пишем, пока не убедились, что прочитали
+  // его успешно, и никогда не пишем пустоту поверх непустого хранилища.
+  const cloudLoadOk = useRef(false) // чтение CloudStorage завершилось успешно
+  const cloudHadData = useRef(false) // в CloudStorage что-то было
+  const [dataGuard, setDataGuard] = useState<string | null>(null)
+
+  const isEmpty = (d: AppData) => d.transactions.length === 0 && d.investments.length === 0
+
   const firstName = tgUser?.first_name?.trim() || ''
   const displayName = profile.name || firstName || 'Guest'
 
@@ -154,6 +168,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const str = JSON.stringify(next)
       const okLocal = sset(KEY, str)
       if (hasCloud) {
+        // Предохранитель: пишем в облако только если успешно его прочитали.
+        if (!cloudLoadOk.current) {
+          setDataGuard(
+            'Cloud data was not loaded, so saving to Telegram is paused to protect your history. Download a backup and reopen the app.',
+          )
+          return
+        }
+        // И никогда не затираем непустое хранилище пустотой.
+        if (cloudHadData.current && isEmpty(next)) {
+          setDataGuard(
+            'Refused to overwrite your Telegram data with an empty set. Nothing was sent to the cloud.',
+          )
+          return
+        }
         void bigSet('data', str).then((ok) => {
           if (!ok) toast('Saved on device; Telegram sync failed')
         })
@@ -219,6 +247,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .then(({ items }) => {
         const transactions = items.map(toLocalTx)
         setData((prev) => {
+          // Тот же принцип: пустой ответ базы не стирает уже имеющиеся записи.
+          // Пустая D1 при непустой истории — это состояние «ещё не перенесли»,
+          // а не «данных нет».
+          if (transactions.length === 0 && prev.transactions.length > 0) {
+            setDataGuard(
+              'The cloud database is still empty while this device has data. Showing your local data; nothing was overwritten.',
+            )
+            return prev
+          }
           const next = { ...prev, transactions }
           sset(KEY, JSON.stringify(next)) // обновляем офлайн-кэш
           return next
@@ -364,9 +401,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sset(KEY + '-bak', rawLocal)
       toast('Could not read saved data — backup kept')
     }
-    if (!hasCloud) return
-    Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile'), cloudGet('chartstyle')]).then(
+    if (!hasCloud) {
+      cloudLoadOk.current = true // облака нет вовсе — предохранителю нечего защищать
+      return
+    }
+    Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile'), cloudGet('chartstyle')])
+      .catch((e) => {
+        // Чтение не удалось — предохранитель остаётся включённым, писать нельзя.
+        setDataGuard(
+          'Could not read your Telegram data. Saving is paused so nothing gets overwritten. Check the connection and reopen the app.',
+        )
+        throw e
+      })
+      .then(
       ([dataStr, th, profStr, cs]) => {
+        // Чтение прошло. Запоминаем, было ли там что-то: с этого момента запись
+        // в облако разрешена, но пустотой поверх непустого — по-прежнему нет.
+        cloudLoadOk.current = true
+        const cloudParsed = dataStr ? parseStored(dataStr) : null
+        cloudHadData.current = !!cloudParsed && !isEmpty(cloudParsed)
+
         if ((th === 'light' || th === 'dark') && th !== theme) {
           setThemeState(th)
           applyTheme(th)
@@ -413,6 +467,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notice,
       cloud,
       syncCloud,
+      dataGuard,
       firstName,
       profile,
       displayName,
@@ -434,7 +489,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast,
     }),
     [
-      data, theme, chartStyle, cursor, tab, filter, notice, cloud, syncCloud, firstName, profile, displayName,
+      data, theme, chartStyle, cursor, tab, filter, notice, cloud, syncCloud, dataGuard, firstName, profile, displayName,
       shiftMonth, toggleTheme, setTheme, setChartStyle, setProfile, addTx, delTx, addInv, delInv,
       restore, restoreSnapshot, loadDemo, clearAll, toast,
     ],

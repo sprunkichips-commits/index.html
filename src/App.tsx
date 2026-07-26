@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Settings } from 'lucide-react'
+import { Plus, Settings, ShieldAlert } from 'lucide-react'
 import { StoreProvider, useStore } from './store/StoreContext'
 import { GoalsProvider } from './store/GoalsContext'
 import { OWNER_ID, tgUser } from './lib/telegram'
@@ -58,6 +58,7 @@ function Shell() {
       <div className="flex min-h-full w-full">
         <Sidebar onSettings={openSettings} />
         <main className="tg-safe-top mx-auto min-w-0 flex-1 px-4 pb-28 pt-5 lg:max-w-[1100px] lg:px-8 lg:pb-10 lg:pt-7">
+          <DataGuardBanner />
           <header className="mb-5 flex items-center justify-between gap-2">
             {tab === 'goals' ? <div className="text-lg font-bold">Goals & habits</div> : <MonthSelector />}
             <div className="flex items-center gap-2">
@@ -88,6 +89,29 @@ function Shell() {
       <TxDetailSheet tx={detailTx} onClose={() => setDetailTx(null)} />
       <Toast />
     </>
+  )
+}
+
+/**
+ * Предупреждение предохранителя. Показывается вверху и не исчезает само:
+ * речь о риске потери истории операций, такое нельзя прятать в тост,
+ * который пропадает через две секунды.
+ */
+function DataGuardBanner() {
+  const { dataGuard } = useStore()
+  if (!dataGuard) return null
+  return (
+    <div
+      role="alert"
+      className="mb-4 flex items-start gap-2.5 rounded-2xl border border-neg/40 bg-neg/10 px-4 py-3 text-[13px] leading-relaxed text-ink"
+    >
+      <ShieldAlert size={18} className="mt-0.5 flex-none text-neg" />
+      <span>
+        <b className="text-neg">Saving paused</b>
+        <br />
+        {dataGuard}
+      </span>
+    </div>
   )
 }
 

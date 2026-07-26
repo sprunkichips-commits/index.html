@@ -14,14 +14,27 @@ export const CSKEY = 'pm-finance-chartstyle-v1' // localStorage: стиль гр
 const CHUNK = 3500
 const prevN: Record<string, number> = {}
 
-export function cloudGet(k: string): Promise<string | null> {
+/**
+ * Чтение с РАЗЛИЧЕНИЕМ ошибки и пустоты. Это критично: если сбой чтения
+ * выглядит как «в хранилище ничего нет», приложение решит, что истории не
+ * существует, и первая же запись затрёт её. Раньше ошибка молча превращалась
+ * в null — предохранитель считал такое чтение успешным.
+ */
+function cloudGetRaw(k: string): Promise<{ ok: boolean; value: string | null }> {
   return new Promise((res) => {
     try {
-      TG!.CloudStorage!.getItem(k, (e, v) => res(e ? null : v || null))
+      TG!.CloudStorage!.getItem(k, (e, v) =>
+        res(e ? { ok: false, value: null } : { ok: true, value: v || null }),
+      )
     } catch {
-      res(null)
+      res({ ok: false, value: null })
     }
   })
+}
+
+/** Мягкое чтение: ошибка и пустота одинаково дают null (для необязательных ключей). */
+export function cloudGet(k: string): Promise<string | null> {
+  return cloudGetRaw(k).then((r) => r.value)
 }
 
 export function cloudSet(k: string, v: string): Promise<boolean> {
@@ -75,18 +88,26 @@ export async function bigSet(name: string, str: string): Promise<boolean> {
   return true
 }
 
-export function bigGet(name: string): Promise<string | null> {
-  return cloudGet(name + '_n').then((ns) => {
-    if (ns == null) return null
-    const n = parseInt(ns) || 0
-    const arr: Promise<string | null>[] = []
-    for (let i = 0; i < n; i++) arr.push(cloudGet(name + '_' + i))
-    return Promise.all(arr).then((parts) => {
-      for (let j = 0; j < parts.length; j++) if (parts[j] == null) return null
-      prevN[name] = n
-      return parts.join('')
-    })
-  })
+/**
+ * Чтение больших значений. БРОСАЕТ ошибку, если хранилище недоступно или чанк
+ * не читается — вызывающий обязан отличить это от «данных нет», иначе рискует
+ * записать пустоту поверх настоящей истории. Возвращает null только когда
+ * значения действительно нет.
+ */
+export async function bigGet(name: string): Promise<string | null> {
+  const head = await cloudGetRaw(name + '_n')
+  if (!head.ok) throw new Error(`CloudStorage read failed: ${name}_n`)
+  if (head.value == null) return null // ключа нет — данных действительно нет
+  const n = parseInt(head.value) || 0
+  const parts = await Promise.all(
+    Array.from({ length: n }, (_, i) => cloudGetRaw(name + '_' + i)),
+  )
+  for (const p of parts) {
+    // Счётчик есть, а кусок не прочитался — данные ЕСТЬ, но получить их не смогли.
+    if (!p.ok || p.value == null) throw new Error(`CloudStorage read failed: ${name} chunk`)
+  }
+  prevN[name] = n
+  return parts.map((p) => p.value).join('')
 }
 
 const mem: Record<string, string> = {}

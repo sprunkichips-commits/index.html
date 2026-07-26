@@ -6,9 +6,11 @@ name: Deploy to GitHub Pages
 # по умолчанию). Чтобы публиковать с другой ветки — добавь её в
 # Settings → Environments → github-pages → Deployment branches.
 
+# Автодеплой ОТКЛЮЧЁН: приложение переехало на Cloudflare
+# (mmm.sprunkichips.workers.dev), и параллельно обновляющаяся копия на GitHub
+# Pages показывала другую версию — было непонятно, какая из них настоящая.
+# Запуск остался только вручную, кнопкой «Run workflow», как аварийный вариант.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
