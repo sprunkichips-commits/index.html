@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Settings, ShieldAlert } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2, Plus, Settings, ShieldAlert } from 'lucide-react'
 import { StoreProvider, useStore } from './store/StoreContext'
 import { GoalsProvider } from './store/GoalsContext'
 import { OWNER_ID, tgUser } from './lib/telegram'
@@ -11,6 +11,8 @@ import { AddSheet } from './components/AddSheet'
 import { SettingsSheet } from './components/SettingsSheet'
 import { ProfileSheet } from './components/ProfileSheet'
 import { TxDetailSheet } from './components/TxDetailSheet'
+import { LoginScreen } from './components/LoginScreen'
+import { api, hasInitData } from './lib/api'
 import { Button } from './components/ui/button'
 import { Dashboard } from './screens/Dashboard'
 import { Transactions } from './screens/Transactions'
@@ -33,7 +35,18 @@ export default function App() {
 }
 
 function Shell() {
-  const { tab } = useStore()
+  const { tab, auth } = useStore()
+  // Имя бота нужно только для кнопки входа на сайте — тянем лениво.
+  const [botName, setBotName] = useState('')
+  useEffect(() => {
+    if (auth === 'anon' && !hasInitData()) {
+      api.config().then((c) => setBotName(c.botUsername)).catch(() => setBotName(''))
+    }
+  }, [auth])
+
+  // ВАЖНО: все хуки объявлены до ранних return'ов. Иначе при переходе
+  // checking → authed их количество между отрисовками меняется, React падает
+  // (ошибка #310) и вместо приложения остаётся пустой экран.
   const [addOpen, setAddOpen] = useState(false)
   const [addType, setAddType] = useState<TxType>('Расход')
   const [setOpen, setSetOpen] = useState(false)
@@ -47,6 +60,25 @@ function Shell() {
   const openSettings = () => setSetOpen(true)
   const openProfile = () => setProfileOpen(true)
   const openDetail = (tx: Tx) => setDetailTx(tx)
+
+  // Пока выясняем, авторизованы ли мы, показываем загрузку — а не пустой экран
+  // с «Guest» и нулями, который выглядел как «данные пропали».
+  if (auth === 'checking') {
+    return (
+      <>
+        <div className="app-bg" />
+        <div className="grid min-h-full place-items-center">
+          <div className="flex flex-col items-center gap-3 text-sub">
+            <Loader2 size={26} className="animate-spin text-accent" />
+            <span className="text-[13px]">Loading your data…</span>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // В браузере без входа — экран входа через Telegram.
+  if (auth === 'anon' && !hasInitData()) return <LoginScreen botName={botName} />
 
   return (
     <>

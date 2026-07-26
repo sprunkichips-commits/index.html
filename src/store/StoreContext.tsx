@@ -37,7 +37,7 @@ import {
   bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, sset,
 } from '@/lib/storage'
 import { localDateStr } from '@/lib/goals'
-import { api, hasApiAuth } from '@/lib/api'
+import { api, hasInitData, resolveAuth, type AuthInfo } from '@/lib/api'
 import { fullRange, toCloudPayload, toLocalTx } from '@/lib/cloudSync'
 import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 
@@ -69,6 +69,9 @@ interface AddInvInput {
 /** Состояние связи с облаком: облако — источник правды, локально — кэш чтения. */
 export type CloudState = 'off' | 'syncing' | 'synced' | 'offline'
 
+/** Авторизация асинхронна: на сайте её приходится спрашивать у сервера. */
+export type AuthState = 'checking' | 'authed' | 'anon'
+
 interface Store {
   data: AppData
   theme: Theme
@@ -81,6 +84,8 @@ interface Store {
   syncCloud: () => void
   /** Заметное предупреждение: запись в облако заблокирована предохранителем. */
   dataGuard: string | null
+  auth: AuthState
+  authInfo: AuthInfo | null
   firstName: string
   profile: Profile
   displayName: string
@@ -128,7 +133,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [filter, setFilter] = useState<Filter>('Все')
   const [notice, setNotice] = useState<string | null>(null)
   const [profile, setProfileState] = useState<Profile>(() => parseProfile(sget(PKEY)))
-  const [cloud, setCloud] = useState<CloudState>(() => (hasApiAuth() ? 'syncing' : 'off'))
+  const [cloud, setCloud] = useState<CloudState>(() => (hasInitData() ? 'syncing' : 'off'))
+  // Внутри Telegram знаем сразу; в браузере ждём ответа сервера про сессию.
+  const [auth, setAuth] = useState<AuthState>(() => (hasInitData() ? 'authed' : 'checking'))
+  const [authInfo, setAuthInfo] = useState<AuthInfo | null>(() =>
+    hasInitData() ? { authenticated: true, via: 'telegram' } : null,
+  )
+  const authedRef = useRef(hasInitData())
   const toastTimer = useRef<number | null>(null)
   // Пользователь уже менял данные/профиль в этой сессии? Тогда поздняя
   // гидратация из облака НЕ должна затирать его правки (см. boot-эффект).
@@ -239,7 +250,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * чтобы приложение открывалось и работало на чтение без связи.
    */
   const syncCloud = useCallback(() => {
-    if (!hasApiAuth()) return
+    if (!authedRef.current) return
     setCloud('syncing')
     const { from, to } = fullRange()
     api
@@ -297,7 +308,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCursor({ y: d.getFullYear(), m: d.getMonth() })
       persist(next)
 
-      if (hasApiAuth()) {
+      if (authedRef.current) {
         api
           .addTransaction(toCloudPayload({ ...input, category, subCategory, payer, note, amount }))
           .then(() => {
@@ -318,7 +329,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const delTx = useCallback(
     (id: string) => {
       persist({ ...data, transactions: data.transactions.filter((x) => x.id !== id) })
-      if (hasApiAuth()) {
+      if (authedRef.current) {
         api.deleteTransaction(id).catch(() => {
           setCloud('offline')
           toast('No connection — not deleted in the cloud')
@@ -392,8 +403,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     booted.current = true
     applyTheme(theme)
     tgReady()
-    // Облако — источник правды. Кэш уже отрисован, тянем свежие данные поверх.
-    syncCloud()
+    // Сначала выясняем, авторизованы ли мы (в браузере это запрос к серверу),
+    // и только потом тянем данные. Иначе на сайте синхронизация не запускалась
+    // вообще — и он показывал «Guest» с нулями при живой сессии.
+    void resolveAuth().then((info) => {
+      authedRef.current = info.authenticated
+      setAuthInfo(info)
+      setAuth(info.authenticated ? 'authed' : 'anon')
+      if (info.authenticated) syncCloud()
+      else setCloud('off')
+    })
     // Запись есть, но JSON не читается (порча/обрыв записи)? Прячем копию в
     // -bak: дальнейшие сохранения перезапишут KEY, а исходник останется.
     const rawLocal = sget(KEY)
@@ -468,6 +487,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cloud,
       syncCloud,
       dataGuard,
+      auth,
+      authInfo,
       firstName,
       profile,
       displayName,
@@ -489,7 +510,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast,
     }),
     [
-      data, theme, chartStyle, cursor, tab, filter, notice, cloud, syncCloud, dataGuard, firstName, profile, displayName,
+      data, theme, chartStyle, cursor, tab, filter, notice, cloud, syncCloud, dataGuard, auth, authInfo, firstName, profile, displayName,
       shiftMonth, toggleTheme, setTheme, setChartStyle, setProfile, addTx, delTx, addInv, delInv,
       restore, restoreSnapshot, loadDemo, clearAll, toast,
     ],

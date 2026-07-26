@@ -23,9 +23,36 @@ export class ApiError extends Error {
   }
 }
 
-/** Доступен ли серверный режим: без initData сервер откажет в доступе. */
-export function hasApiAuth(): boolean {
+/**
+ * Есть ли подпись Telegram прямо сейчас (приложение открыто внутри Telegram).
+ * ВНИМАНИЕ: это НЕ полная проверка авторизации — на сайте её нет, а сессия
+ * может быть. Для решения «можно ли обращаться к API» используйте resolveAuth().
+ */
+export function hasInitData(): boolean {
   return !!TG?.initData
+}
+
+export interface AuthInfo {
+  authenticated: boolean
+  userId?: number
+  via?: 'telegram' | 'session'
+}
+
+/**
+ * Полная проверка авторизации. Внутри Telegram отвечает сразу по initData;
+ * в браузере спрашивает сервер про cookie-сессию (выданную после входа через
+ * Telegram Login Widget). Раньше здесь проверялся только initData — поэтому
+ * на сайте приложение вообще не обращалось к API и показывало «Guest» с нулями,
+ * хотя сессия уже была выдана.
+ */
+export async function resolveAuth(): Promise<AuthInfo> {
+  if (hasInitData()) return { authenticated: true, via: 'telegram' }
+  try {
+    const r = await request<AuthInfo>('/api/auth/me', { timeoutMs: 8000 })
+    return r?.authenticated ? { ...r, via: r.via ?? 'session' } : { authenticated: false }
+  } catch {
+    return { authenticated: false }
+  }
 }
 
 interface RequestOptions {
@@ -48,6 +75,10 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   try {
     const res = await fetch(API_BASE + path, {
       method,
+      // credentials обязательны: без них cookie сессии не уедет и сайт получит
+      // 401, даже если вход выполнен. API живёт на том же домене, поэтому
+      // достаточно same-origin — сторонним сайтам cookie не отдаём.
+      credentials: 'same-origin',
       headers: {
         'X-Telegram-Init-Data': TG?.initData || '',
         ...(body != null ? { 'Content-Type': 'application/json' } : {}),
@@ -183,10 +214,14 @@ export interface ImportReport {
   goals: ImportCounts
   tasks: ImportCounts
   taskLog: ImportCounts
+  profile: boolean
   warnings: string[]
 }
 
 export const api = {
+  /** Публичные настройки сервера (имя бота для кнопки входа). */
+  config: () => request<{ botUsername: string }>('/api/config'),
+
   health: () => request<{ ok: boolean; ts: number; database?: string }>('/api/health'),
 
   /** Переносит бэкап (финансы + цели) в облако. Повторный вызов не дублирует. */

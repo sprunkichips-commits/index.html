@@ -55,6 +55,7 @@ export interface ImportReport {
   goals: ImportCounts
   tasks: ImportCounts
   taskLog: ImportCounts
+  profile: boolean
   warnings: string[]
 }
 
@@ -75,6 +76,7 @@ export async function importBackup(db: D1Database, userId: number, payload: unkn
     goals: { imported: 0, duplicates: 0, skipped: 0 },
     tasks: { imported: 0, duplicates: 0, skipped: 0 },
     taskLog: { imported: 0, duplicates: 0, skipped: 0 },
+    profile: false,
     warnings: [],
   }
   if (!payload || typeof payload !== 'object') {
@@ -240,6 +242,29 @@ export async function importBackup(db: D1Database, userId: number, payload: unkn
     for (const r of await db.batch(logStmts)) {
       if (r.meta.changes > 0) report.taskLog.imported++
       else report.taskLog.duplicates++
+    }
+  }
+
+  // ---------- Профиль (ник + аватар) ----------
+  // Аватар — data-URL картинки; принимаем только его, иначе внешние ссылки
+  // могли бы утащить пользователя куда угодно.
+  const prof = data.profile as { name?: unknown; avatar?: unknown } | undefined
+  if (prof && typeof prof === 'object') {
+    const name = String(prof.name ?? '').slice(0, 40).trim()
+    const avatarRaw = String(prof.avatar ?? '')
+    const avatar =
+      /^data:image\/(png|jpeg|jpg|webp|gif);base64,/.test(avatarRaw) && avatarRaw.length <= 600_000
+        ? avatarRaw
+        : ''
+    if (name || avatar) {
+      await db
+        .prepare(
+          `INSERT INTO profile (user_id, name, avatar) VALUES (?1, ?2, ?3)
+           ON CONFLICT(user_id) DO UPDATE SET name = ?2, avatar = ?3`,
+        )
+        .bind(userId, name, avatar)
+        .run()
+      report.profile = true
     }
   }
 

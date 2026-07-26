@@ -162,7 +162,7 @@ export function readCookie(header: string | undefined, name: string): string {
 }
 
 export interface AuthEnv {
-  Bindings: { DB: D1Database; BOT_TOKEN: string; ALLOW_DEV_USER?: string }
+  Bindings: { DB: D1Database; BOT_TOKEN: string; BOT_USERNAME?: string; ALLOW_DEV_USER?: string }
   Variables: { userId: number; user: TgUser }
 }
 

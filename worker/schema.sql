@@ -91,6 +91,13 @@ CREATE TABLE IF NOT EXISTS task_log (
 );
 CREATE INDEX IF NOT EXISTS idx_task_log_user_day ON task_log(user_id, day);
 
+/* ---------- Профиль (ник и аватар) ---------- */
+CREATE TABLE IF NOT EXISTS profile (
+  user_id INTEGER PRIMARY KEY,
+  name    TEXT NOT NULL DEFAULT '',
+  avatar  TEXT NOT NULL DEFAULT ''
+);
+
 /* ---------- Наполнение справочников ----------
  * id категорий совпадают с ключами на клиенте, чтобы перенос старых данных
  * был однозначным (см. worker/src/import.ts).

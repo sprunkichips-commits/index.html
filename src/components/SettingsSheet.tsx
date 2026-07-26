@@ -5,7 +5,7 @@ import { Button } from './ui/button'
 import { Textarea } from './ui/input'
 import { useStore } from '@/store/StoreContext'
 import { useGoals } from '@/store/GoalsContext'
-import { api, ApiError, hasApiAuth, type ImportReport } from '@/lib/api'
+import { api, ApiError, type ImportReport } from '@/lib/api'
 import { hasCloud, tgUserId } from '@/lib/telegram'
 import { today } from '@/lib/format'
 import { fmtDateLong } from '@/lib/format'
@@ -14,11 +14,12 @@ import { GKEY, KEY, readSnapshot } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll, toast, cloud } =
+  const { data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll, toast, cloud, auth, profile, setProfile } =
     useStore()
   const goals = useGoals()
   const [text, setText] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const cloudFileRef = useRef<HTMLInputElement>(null)
   // Состояние переноса в облако: idle → sending → отчёт или ошибка.
   const [upload, setUpload] = useState<{ busy: boolean; report: ImportReport | null; error: string | null }>({
     busy: false,
@@ -48,18 +49,11 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     toast(ok ? 'CSV downloaded' : 'Could not download')
   }
 
-  /**
-   * Перенос данных в облако. Отправляет тот же набор, что и файл бэкапа,
-   * прямо из приложения — подпись Telegram уже есть, руками ничего доставать
-   * не нужно. Локальные данные остаются на месте: это копирование, не переезд.
-   */
-  async function uploadToCloud() {
-    // Цели расшифровываются асинхронно. Если отправить раньше готовности,
-    // они уйдут пустыми, а отчёт покажет «Goals: 0» — будто их нет вовсе.
-    if (goals.status !== 'ready') return
+  /** Отправка набора данных в облако + разбор ошибки понятным текстом. */
+  async function sendToCloud(payload: unknown) {
     setUpload({ busy: true, report: null, error: null })
     try {
-      const report = await api.importBackup({ ...data, goals: goals.data })
+      const report = await api.importBackup(payload)
       setUpload({ busy: false, report, error: null })
     } catch (e) {
       const msg =
@@ -72,6 +66,40 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     }
   }
 
+  /**
+   * Перенос данных в облако. Отправляет тот же набор, что и файл бэкапа,
+   * прямо из приложения — подпись Telegram уже есть, руками ничего доставать
+   * не нужно. Локальные данные остаются на месте: это копирование, не переезд.
+   */
+  function uploadToCloud() {
+    // Цели расшифровываются асинхронно. Если отправить раньше готовности,
+    // они уйдут пустыми, а отчёт покажет «Goals: 0» — будто их нет вовсе.
+    if (goals.status !== 'ready') return
+    void sendToCloud({ ...data, goals: goals.data, profile })
+  }
+
+  /**
+   * Перенос из файла бэкапа сразу в облако, минуя состояние приложения.
+   * Нужен там, где данных на устройстве ещё нет: сайт или свежая версия
+   * в Телеграме. Одно действие вместо «сначала восстановить, потом отправить»,
+   * и локальная копия не подменяется — её перезапишет обычная загрузка из облака.
+   */
+  function onCloudFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    const r = new FileReader()
+    r.onload = () => {
+      try {
+        void sendToCloud(JSON.parse(String(r.result)))
+      } catch {
+        setUpload({ busy: false, report: null, error: 'This file is not a «Деньги» backup — expected the .json saved by «Download file».' })
+      }
+    }
+    r.onerror = () => setUpload({ busy: false, report: null, error: 'Could not read the file' })
+    r.readAsText(f)
+  }
+
   async function restoreFromSnapshot() {
     if (!window.confirm('Roll back to the auto-snapshot? Changes made since then will be lost.')) return
     const okFin = restoreSnapshot()
@@ -82,7 +110,7 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   // Бэкап включает и финансы, и цели — один файл спасает всё.
   // Старые файлы (без ключа goals) восстанавливаются как раньше.
   function exportStr(pretty: boolean): string {
-    const full = { ...data, goals: goals.data }
+    const full = { ...data, goals: goals.data, profile }
     return JSON.stringify(full, null, pretty ? 2 : undefined)
   }
 
@@ -90,6 +118,11 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     restore(obj) // финансы (строгий sanitize внутри)
     if (obj && typeof obj === 'object' && 'goals' in obj) {
       goals.restoreGoals((obj as { goals: unknown }).goals)
+    }
+    // Профиль лежит в бэкапе отдельным блоком — восстанавливаем и его.
+    if (obj && typeof obj === 'object' && 'profile' in obj) {
+      const p = (obj as { profile?: { name?: string; avatar?: string } }).profile
+      if (p && typeof p === 'object') setProfile({ name: p.name ?? '', avatar: p.avatar ?? '' })
     }
   }
 
@@ -211,7 +244,7 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
 
       {/* Перенос в облако Cloudflare. Виден только в Telegram: без подписи
           сервер откажет в доступе. Копирует данные, локальные не трогает. */}
-      {hasApiAuth() && (
+      {auth === 'authed' && (
         <>
           <div className={cn(cap, 'mb-2')}>Cloud storage</div>
           <div
@@ -252,6 +285,26 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
             )}
           </Button>
 
+          <Button
+            variant="soft"
+            className="mt-2 w-full"
+            onClick={() => cloudFileRef.current?.click()}
+            disabled={upload.busy}
+          >
+            <Upload size={15} /> Load backup file into cloud
+          </Button>
+          <input
+            ref={cloudFileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={onCloudFile}
+          />
+          <p className="mt-2 text-[13px] leading-relaxed text-sub">
+            Use this on the website or on a fresh install: pick the .json saved by «Download file» in
+            the old app. Sending the same file twice is safe — nothing gets duplicated.
+          </p>
+
           {upload.error && (
             <div className="mt-2 rounded-xl border border-neg/30 bg-neg/10 px-3 py-2 text-[13px] text-neg">
               {upload.error}
@@ -276,6 +329,8 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
                     {c.skipped > 0 && `, ${c.skipped} skipped`}
                   </div>
                 ))}
+                {/* Профиль — не счётчик, а факт: перенёсся ник с аватаром или нет. */}
+                <div>Profile: {upload.report.profile ? 'transferred' : 'nothing to transfer'}</div>
               </div>
               {upload.report.warnings.length > 0 && (
                 <ul className="mt-1.5 list-inside list-disc text-xs text-faint">

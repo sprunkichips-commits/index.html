@@ -78,6 +78,10 @@ function centsToRub(cents: number): number {
 
 // ---------- Проверка живости (без авторизации) ----------
 
+/** Публичные настройки для клиента. Секретов здесь нет: имя бота публично,
+ *  а токен остаётся на сервере. Нужен сайту, чтобы отрисовать кнопку входа. */
+app.get('/api/config', (c) => c.json({ botUsername: c.env.BOT_USERNAME ?? '' }))
+
 app.get('/api/health', (c) =>
   c.json({ ok: true, ts: Date.now(), database: c.env.DB ? 'connected' : 'not_configured' }),
 )
@@ -115,6 +119,13 @@ app.get('/api/auth/me', async (c) => {
   if (token) {
     const userId = await readSession(token, c.env.BOT_TOKEN)
     if (userId) return c.json({ authenticated: true, userId, via: 'session' })
+  }
+  // Локальная разработка: тот же признак, что и в telegramAuth. Без него
+  // запросы к данным проходили, а приложение всё равно показывало вход —
+  // проверить сайт локально было невозможно. В бою переменной нет.
+  const devUser = c.env.ALLOW_DEV_USER
+  if (devUser && /^\d+$/.test(devUser)) {
+    return c.json({ authenticated: true, userId: Number(devUser), via: 'session' })
   }
   return c.json({ authenticated: false }, 200)
 })
