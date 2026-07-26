@@ -9,7 +9,7 @@
 # name обязан совпадать с именем сервиса в Cloudflare (mmm.sprunkichips.workers.dev).
 # Пока здесь стояло «dengi», деплой не попадал в существующий воркер, а
 # `wrangler deploy` создал бы рядом второй — приложение в бою не обновлялось.
-name = "mmm"
+name = "ceo"
 main = "worker/src/index.ts"
 compatibility_date = "2026-07-01"
 compatibility_flags = ["nodejs_compat"]
