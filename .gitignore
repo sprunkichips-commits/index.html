@@ -5,3 +5,6 @@ dist-ssr
 .DS_Store
 .vite
 .wrangler
+# локальные секреты для `wrangler dev` — в репозиторий не попадают
+.dev.vars
+.dev.vars.*

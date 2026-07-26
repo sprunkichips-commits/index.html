@@ -24,6 +24,17 @@ const MAX_AGE_SECONDS = 24 * 60 * 60
 
 const encoder = new TextEncoder()
 
+/**
+ * Токен как ключ подписи. Обрезка пробелов и перевода строки обязательна:
+ * при копировании из BotFather и вставке в панель Cloudflare на конце легко
+ * остаётся \n, а один лишний символ полностью меняет ключ HMAC — подпись
+ * перестаёт сходиться при верном на вид токене. Применяется во всех местах,
+ * где токен служит ключом, иначе части системы считали бы разные ключи.
+ */
+function botKey(botToken: string): string {
+  return botToken.trim()
+}
+
 async function hmacSha256(key: ArrayBuffer | Uint8Array, message: string): Promise<ArrayBuffer> {
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
@@ -62,13 +73,19 @@ export async function verifyInitData(initData: string, botToken: string): Promis
   const hash = params.get('hash')
   if (!hash) return { ok: false, reason: 'no hash' }
 
+  // Исключается ТОЛЬКО hash. Здесь была ошибка: отбрасывалось ещё и поле
+  // signature — а это отдельная Ed25519-подпись Telegram для сторонней
+  // проверки, и в HMAC-строку она входит наравне с остальными полями
+  // (без signature её проверяют только в методе с публичным ключом).
+  // Современные клиенты signature присылают, поэтому подпись не сходилась у
+  // каждого запроса из Telegram: сервер считал HMAC не от той строки.
   const dataCheckString = [...params.entries()]
-    .filter(([k]) => k !== 'hash' && k !== 'signature')
+    .filter(([k]) => k !== 'hash')
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${k}=${v}`)
     .join('\n')
 
-  const secretKey = await hmacSha256(encoder.encode('WebAppData'), botToken)
+  const secretKey = await hmacSha256(encoder.encode('WebAppData'), botKey(botToken))
   const expected = toHex(await hmacSha256(secretKey, dataCheckString))
   if (!timingSafeEqual(expected, hash)) return { ok: false, reason: 'bad signature' }
 
@@ -114,7 +131,7 @@ export async function verifyLoginWidget(
     .map((k) => `${k}=${params[k]}`)
     .join('\n')
 
-  const secret = await sha256(botToken)
+  const secret = await sha256(botKey(botToken))
   const expected = toHex(await hmacSha256(new Uint8Array(secret), dataCheckString))
   if (!timingSafeEqual(expected, hash)) return { ok: false, reason: 'bad signature' }
 
@@ -130,7 +147,7 @@ export async function verifyLoginWidget(
 /** Подписанный маркер сессии: "userId.срок.подпись". Секрет — токен бота. */
 export async function createSession(userId: number, botToken: string): Promise<string> {
   const payload = `${userId}.${Date.now() + SESSION_DAYS * 86400_000}`
-  const sig = toHex(await hmacSha256(encoder.encode(botToken), payload))
+  const sig = toHex(await hmacSha256(encoder.encode(botKey(botToken)), payload))
   return `${payload}.${sig}`
 }
 
@@ -139,7 +156,7 @@ export async function readSession(token: string, botToken: string): Promise<numb
   const parts = token.split('.')
   if (parts.length !== 3 || !botToken) return null
   const [idStr, expStr, sig] = parts
-  const expected = toHex(await hmacSha256(encoder.encode(botToken), `${idStr}.${expStr}`))
+  const expected = toHex(await hmacSha256(encoder.encode(botKey(botToken)), `${idStr}.${expStr}`))
   if (!timingSafeEqual(expected, sig)) return null
   if (!(Number(expStr) > Date.now())) return null
   const id = Number(idStr)
@@ -227,6 +244,9 @@ export const telegramAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
         method: c.req.method,
         reason: res.reason,
         initDataLength: initData.length,
+        // Имена полей, не значения: по ним сразу видно, что именно прислал
+        // клиент (например, есть ли signature) — секретов в именах нет.
+        initDataFields: [...new URLSearchParams(initData).keys()].sort(),
         botTokenConfigured: !!c.env.BOT_TOKEN,
         cookie: c.req.header('Cookie') ? 'present' : 'none',
       }),
