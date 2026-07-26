@@ -39,7 +39,7 @@ import {
 import { localDateStr } from '@/lib/goals'
 import { api, ApiError, hasInitData, resolveAuth, type AuthInfo } from '@/lib/api'
 import { fullRange, toCloudPayload, toLocalTx } from '@/lib/cloudSync'
-import { hasCloud, tgAlert, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
+import { hasCloud, tgAlert, tgNotify, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 
 export type Theme = 'dark' | 'light'
 /** Стиль графиков статистики: classic — столбцы, studio — линия (как в YouTube Studio). */
@@ -321,7 +321,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const payer = clampStr((input.payer || '').trim(), PAYER_MAX)
       const note = clampStr((input.note || '').trim(), NOTE_MAX)
       const amount = clampAmt(input.amount)
-      if (!category || amount <= 0 || !validDate(input.date)) return false
+      if (!category || amount <= 0 || !validDate(input.date)) {
+        tgNotify('error') // форма не заполнена — отклик до появления подсказки
+        return false
+      }
       const tx: Tx = {
         id: uid(),
         date: input.date,
@@ -359,11 +362,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             setCloud('offline')
             const msg = e instanceof ApiError ? e.message : 'Unknown error'
             const code = e instanceof ApiError ? ` [${e.status || 'network'}]` : ''
+            tgNotify('error')
             tgAlert(`Not saved to the cloud${code}\n\n${msg}`)
             toast('Not saved to the cloud')
           }
         })()
       }
+      tgNotify('success')
       toast('Added')
       return true
     },

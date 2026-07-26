@@ -37,8 +37,14 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
+  /* Высота окна: 100dvh вместо 100vh.
+     На iPhone 100vh — это высота БЕЗ панелей браузера, она не меняется при
+     появлении экранной клавиатуры и адресной строки, поэтому низ интерфейса
+     уезжал под клавиатуру. dvh пересчитывается вместе с видимой областью.
+     100% оставлен первым как запас для клиентов без поддержки dvh. */
   html, body, #root {
     height: 100%;
+    height: 100dvh;
   }
   /* Ведём себя как нативное приложение: только вертикальная прокрутка, без
      pinch-zoom и double-tap-zoom. Дополняется обработчиками в lockZoom(). */
@@ -53,6 +59,18 @@
     color: hsl(var(--ink));
     font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
+    /* Гасим «резинку» страницы: без этого сама страница оттягивается за край,
+       и внутри Telegram этот жест ещё и закрывает приложение. Прокручиваться
+       должны списки внутри, а не полотно целиком. */
+    overscroll-behavior: none;
+  }
+  /* Внутренние области прокрутки не передают инерцию наружу: докрутил список
+     до конца — движение останавливается, а не начинает тянуть страницу. */
+  .scroll-area,
+  [data-scroll-area] {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .mono {
     font-variant-numeric: tabular-nums;

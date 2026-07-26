@@ -1,5 +1,6 @@
 import { Plus } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
+import { tgSelection } from '@/lib/telegram'
 import { NAV } from './navItems'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +16,10 @@ export function BottomNav({ onAdd }: { onAdd: () => void }) {
     return (
       <button
         key={n.tab}
-        onClick={() => setTab(n.tab)}
+        onClick={() => {
+          if (n.tab !== tab) tgSelection()
+          setTab(n.tab)
+        }}
         className={cn(
           'flex h-full min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 transition active:scale-95',
           active ? 'text-accent' : 'text-faint',

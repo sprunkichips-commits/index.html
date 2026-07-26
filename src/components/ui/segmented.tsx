@@ -1,3 +1,4 @@
+import { tgImpact } from '@/lib/telegram'
 import { cn } from '@/lib/utils'
 
 /** Сегмент-таблетки (фильтры/периоды). Активный — синий акцент. */
@@ -24,7 +25,10 @@ export function Segmented<T extends string>({
         return (
           <button
             key={o.value}
-            onClick={() => onChange(o.value)}
+            onClick={() => {
+              if (o.value !== value) tgImpact('light')
+              onChange(o.value)
+            }}
             className={cn(
               'h-10 rounded-xl text-[13px] font-semibold transition active:scale-[.97]',
               active

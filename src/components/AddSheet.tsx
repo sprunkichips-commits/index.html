@@ -11,6 +11,7 @@ import { useStore } from '@/store/StoreContext'
 import { EXPENSE, INCOME, NOTE_MAX, PAYER_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
 import { subCategoriesOf, subCategoryLabel } from '@/lib/categories'
 import { grpAmount, parseAmount, today } from '@/lib/format'
+import { tgImpact } from '@/lib/telegram'
 import { cn } from '@/lib/utils'
 
 export function AddSheet({
@@ -111,7 +112,10 @@ export function AddSheet({
           <button
             key={t}
             type="button"
-            onClick={() => setType(t)}
+            onClick={() => {
+              if (t !== type) tgImpact('light')
+              setType(t)
+            }}
             aria-pressed={t === type}
             className="relative h-11 rounded-xl text-sm font-semibold"
           >

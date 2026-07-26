@@ -53,6 +53,9 @@ export default defineConfig({
             // (см. lib/motion-features), и общее правило «всё в vendor» тянуло
             // бы его обратно в стартовую загрузку.
             if (/[\\/]node_modules[\\/](framer-motion|motion-dom|motion-utils)/.test(id)) return undefined
+            // SDK Telegram — по той же причине: он подключается динамическим
+            // импортом (см. lib/telegram) и не должен ехать в первой загрузке.
+            if (/[\\/]node_modules[\\/]@telegram-apps/.test(id)) return undefined
             // Календарь загружается по требованию (см. date-picker) — держим его
             // отдельно, иначе он приедет вместе с общим vendor и смысла не будет.
             if (/[\\/]node_modules[\\/]react-day-picker/.test(id)) return 'calendar'
