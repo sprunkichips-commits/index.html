@@ -33,7 +33,7 @@ import {
   DEMO,
 } from '@/lib/data'
 import {
-  CSKEY, KEY, PKEY, TKEY,
+  CSKEY, KEY, MKEY, PKEY, TKEY,
   bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, sset,
 } from '@/lib/storage'
 import { localDateStr } from '@/lib/goals'
@@ -154,6 +154,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // его успешно, и никогда не пишем пустоту поверх непустого хранилища.
   const cloudLoadOk = useRef(false) // чтение CloudStorage завершилось успешно
   const cloudHadData = useRef(false) // в CloudStorage что-то было
+  // База отдала непустой набор операций, и он применён? Тогда копия из Telegram
+  // CloudStorage — устаревший КЭШ и права затирать истину не имеет. Без этого
+  // исход зависел от того, кто ответит последним: CloudStorage медленнее, и на
+  // телефоне побеждал старый кэш — удалённая на сайте операция возвращалась.
+  // Именно «непустой»: пустой ответ базы означать «данных нет» не обязан
+  // (см. syncCloud), и тогда копия из CloudStorage по-прежнему нужна.
+  const cloudRowsApplied = useRef(false)
+  const lastSyncAt = useRef(0)
   const [dataGuard, setDataGuard] = useState<string | null>(null)
 
   const isEmpty = (d: AppData) => d.transactions.length === 0 && d.investments.length === 0
@@ -257,18 +265,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .transactions({ from, to })
       .then(({ items }) => {
         const transactions = items.map(toLocalTx)
+        // База уже отдавала операции на этом устройстве? Отметка живёт в
+        // localStorage, поэтому решение не зависит от того, кто из двух
+        // асинхронных чтений успел первым.
+        const everHadRows = sget(MKEY) === '1'
+        if (transactions.length > 0) {
+          sset(MKEY, '1')
+          // Дублируем отметку в CloudStorage: она должна жить там же, где кэш.
+          // Иначе на устройстве с очищенным localStorage кэш есть, а знания о
+          // том, что перенос состоялся, нет — и удалённые записи «оживают».
+          if (hasCloud) void cloudSet('cloudrows', '1')
+        }
+
         setData((prev) => {
-          // Тот же принцип: пустой ответ базы не стирает уже имеющиеся записи.
-          // Пустая D1 при непустой истории — это состояние «ещё не перенесли»,
-          // а не «данных нет».
-          if (transactions.length === 0 && prev.transactions.length > 0) {
-            setDataGuard(
-              'The cloud database is still empty while this device has data. Showing your local data; nothing was overwritten.',
-            )
-            return prev
+          // Пустой ответ базы — это два совершенно разных состояния:
+          //  1. историю ещё не перенесли в облако. Стирать локальную копию
+          //     нельзя ни при каких условиях — она единственная.
+          //  2. записи действительно удалены, возможно с другого устройства.
+          //     Пустоту обязаны принять, иначе удаление не доедет.
+          // Различаем по отметке: если база хоть раз отдавала операции, значит
+          // перенос состоялся и ей можно верить.
+          if (transactions.length === 0 && !everHadRows) {
+            if (prev.transactions.length > 0 || cloudHadData.current) {
+              setDataGuard(
+                'The cloud database is still empty while this device has data. Showing your local data; nothing was overwritten.',
+              )
+              return prev
+            }
           }
+          if (transactions.length > 0) cloudRowsApplied.current = true
           const next = { ...prev, transactions }
-          sset(KEY, JSON.stringify(next)) // обновляем офлайн-кэш
+          const str = JSON.stringify(next)
+          sset(KEY, str) // обновляем офлайн-кэш
+          // Кэш в Telegram тоже: иначе он остаётся с уже удалёнными записями и
+          // в офлайне показал бы их снова. Но пустотой перезаписываем ТОЛЬКО
+          // когда точно знаем, что база авторитетна (перенос состоялся), —
+          // иначе можно затереть непереехавшую историю.
+          if (hasCloud && cloudLoadOk.current && (transactions.length > 0 || everHadRows)) {
+            void bigSet('data', str)
+          }
           return next
         })
         setCloud('synced')
@@ -339,9 +374,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       persist({ ...data, transactions: data.transactions.filter((x) => x.id !== id) })
       if (authedRef.current) {
-        api.deleteTransaction(id).catch(() => {
+        api.deleteTransaction(id).catch((e) => {
+          // Как и при добавлении: показываем настоящую причину попапом, иначе
+          // отказ сервера выглядит как пропавшая сеть, а операция «удалилась»
+          // только на экране и вернётся при следующей синхронизации.
           setCloud('offline')
-          toast('No connection — not deleted in the cloud')
+          const msg = e instanceof ApiError ? e.message : 'Unknown error'
+          const code = e instanceof ApiError ? ` [${e.status || 'network'}]` : ''
+          tgAlert(`Not deleted in the cloud${code}\n\n${msg}`)
+          toast('Not deleted in the cloud')
           syncCloud() // вернём то, что реально в облаке
         })
       }
@@ -433,7 +474,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cloudLoadOk.current = true // облака нет вовсе — предохранителю нечего защищать
       return
     }
-    Promise.all([bigGet('data'), cloudGet('theme'), bigGet('profile'), cloudGet('chartstyle')])
+    Promise.all([
+      bigGet('data'),
+      cloudGet('theme'),
+      bigGet('profile'),
+      cloudGet('chartstyle'),
+      cloudGet('cloudrows'),
+    ])
       .catch((e) => {
         // Чтение не удалось — предохранитель остаётся включённым, писать нельзя.
         setDataGuard(
@@ -442,7 +489,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw e
       })
       .then(
-      ([dataStr, th, profStr, cs]) => {
+      ([dataStr, th, profStr, cs, rowsMark]) => {
         // Чтение прошло. Запоминаем, было ли там что-то: с этого момента запись
         // в облако разрешена, но пустотой поверх непустого — по-прежнему нет.
         cloudLoadOk.current = true
@@ -457,9 +504,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setChartStyleState(cs)
           sset(CSKEY, cs)
         }
-        // Если пользователь уже успел что-то изменить, пока грузилось облако, —
-        // его правки главнее: они уже записаны и локально, и в облако.
-        if (dataStr && !dataDirty.current) {
+        // Копию из CloudStorage применяем ТОЛЬКО если база ещё не отдала свои
+        // операции (медленная сеть, офлайн, пустая база до переноса) — тогда это
+        // полезный кэш, а иногда и единственная копия истории. Если операции из
+        // D1 уже применены, кэш молчит: иначе он вернул бы удалённые записи.
+        // Правки пользователя, сделанные за время загрузки, тоже главнее кэша.
+        if (dataStr && !dataDirty.current && !cloudRowsApplied.current) {
           const parsed = parseStored(dataStr) // raw, без sanitize — обратная совместимость
           if (parsed) {
             setData(parsed)
@@ -471,6 +521,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           void bigSet('data', JSON.stringify(data))
           cloudSet('theme', theme)
         }
+        // Отметка «база уже отдавала операции» нашлась в облаке, а localStorage
+        // о ней не знал (новое устройство, очищенное хранилище). Значит база
+        // авторитетна — перечитываем её: только так принимается пустой ответ,
+        // когда все записи удалены с другого устройства.
+        if (rowsMark === '1') {
+          sset(MKEY, '1')
+          if (!cloudRowsApplied.current) syncCloud()
+        }
+
         if (profStr && !profileDirty.current) {
           const p = parseProfile(profStr)
           setProfileState(p)
@@ -483,6 +542,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Обновление при возврате к приложению. Telegram не перезагружает страницу,
+  // когда её свернули и открыли снова, — без этого удаление, сделанное на
+  // сайте, оставалось видимым на телефоне до полного перезапуска.
+  // Троттлинг: не чаще раза в 5 секунд, чтобы переключение окон не устроило
+  // поток запросов.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!authedRef.current) return
+      const now = Date.now()
+      if (now - lastSyncAt.current < 5000) return
+      lastSyncAt.current = now
+      syncCloud()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [syncCloud])
 
   const value = useMemo<Store>(
     () => ({

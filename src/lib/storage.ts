@@ -8,6 +8,11 @@ export const TKEY = 'pm-finance-theme-v1' // localStorage: тема
 export const PKEY = 'pm-finance-profile-v1' // localStorage: профиль (ник + аватар)
 export const GKEY = 'pm-goals-v1' // localStorage: цели (шифруются автоключом)
 export const CSKEY = 'pm-finance-chartstyle-v1' // localStorage: стиль графиков (classic | studio)
+// Отметка «база D1 хотя бы раз отдавала мои операции на этом устройстве».
+// Нужна, чтобы отличить два внешне одинаковых состояния: «историю ещё не
+// перенесли в облако» (пустую базу принимать нельзя) и «все записи удалены,
+// в том числе с другого устройства» (пустоту принять обязаны).
+export const MKEY = 'pm-finance-cloud-rows-v1'
 // CloudStorage: данные в чанках под именем "data" (data_0…/data_n), тема в "theme",
 // профиль в чанках под именем "profile" (аватар не влезает в один ключ 4096).
 
