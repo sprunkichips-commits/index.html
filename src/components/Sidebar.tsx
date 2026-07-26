@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 export function Sidebar({ onSettings }: { onSettings: () => void }) {
   const { tab, setTab, theme, toggleTheme } = useStore()
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 flex-none flex-col border-r border-line/10 p-4 lg:flex">
+    <aside className="sticky top-0 hidden h-[var(--app-vh,100dvh)] w-60 flex-none flex-col border-r border-line/10 p-4 lg:flex">
       <div className="mb-7 flex items-center gap-3 px-2 pt-2">
         <div className="grid h-10 w-10 place-items-center rounded-2xl bg-accent text-accent-ink shadow-fab">
           <Wallet size={18} />

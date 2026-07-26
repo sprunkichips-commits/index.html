@@ -12,6 +12,12 @@ export interface AdaptiveDialogProps {
   title: string
   /** Убрать заголовок с крестиком — когда содержимое рисует свою шапку. */
   bare?: boolean
+  /**
+   * Панель действий, закреплённая внизу. Отдельным пропсом, а не частью
+   * children: только так кнопка сохранения остаётся видимой, когда содержимое
+   * прокручивается или клавиатура съедает половину экрана.
+   */
+  footer?: React.ReactNode
   children: React.ReactNode
 }
 
@@ -27,16 +33,13 @@ export interface AdaptiveDialogProps {
  * Оба варианта используют одинаковый набор пропсов, поэтому вызывающий код
  * (и уже существующий Sheet) не знает, какой из них сейчас работает.
  */
-export function AdaptiveDialog({ open, onOpenChange, title, bare, children }: AdaptiveDialogProps) {
+export function AdaptiveDialog({ open, onOpenChange, title, bare, footer, children }: AdaptiveDialogProps) {
   const mobile = useIsMobileUi()
-  return mobile ? (
-    <MobileSheet open={open} onOpenChange={onOpenChange} title={title} bare={bare}>
+  const Impl = mobile ? MobileSheet : DesktopModal
+  return (
+    <Impl open={open} onOpenChange={onOpenChange} title={title} bare={bare} footer={footer}>
       {children}
-    </MobileSheet>
-  ) : (
-    <DesktopModal open={open} onOpenChange={onOpenChange} title={title} bare={bare}>
-      {children}
-    </DesktopModal>
+    </Impl>
   )
 }
 
@@ -60,45 +63,72 @@ function CloseButton() {
 
 // ---------- Телефон: шторка снизу ----------
 
-function MobileSheet({ open, onOpenChange, title, bare, children }: AdaptiveDialogProps) {
+function MobileSheet({ open, onOpenChange, title, bare, footer, children }: AdaptiveDialogProps) {
   return (
-    // repositionInputs (по умолчанию) поднимает шторку над экранной клавиатурой —
-    // без этого поле ввода суммы оказывалось под ней.
-    <Drawer.Root open={open} onOpenChange={onOpenChange} repositionInputs>
+    // repositionInputs={false} — намеренно. Своя подстройка vaul под клавиатуру
+    // сдвигает всю шторку вверх, и внутри Telegram на iOS это давало сразу три
+    // беды: заголовок уезжал под шапку Telegram, низ обрезался, а между шторкой
+    // и клавиатурой оставалась тёмная полоса. Здесь вместо сдвига шторка просто
+    // садится на клавиатуру (bottom: --kb) и ограничивается видимой высотой.
+    <Drawer.Root open={open} onOpenChange={onOpenChange} repositionInputs={false}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
         <Drawer.Content
+          style={{
+            // Низ шторки — по верхней кромке клавиатуры: без зазора и без нахлёста.
+            bottom: 'var(--kb, 0px)',
+            // Выше шапки Telegram не поднимаемся; 12px — воздух, чтобы верхний
+            // край не прилипал вплотную.
+            maxHeight: 'calc(var(--app-vh, 100dvh) - var(--tg-top, 0px) - 12px)',
+          }}
           className={cn(
             PANEL,
-            'fixed bottom-0 left-0 right-0 z-50 mx-auto flex w-full max-w-[520px] flex-col',
+            'fixed left-0 right-0 z-50 mx-auto flex w-full max-w-[520px] flex-col',
             'rounded-t-[26px] border-t',
-            // Высота по содержимому, но не выше экрана; прокрутка внутри.
-            'max-h-[94svh]',
           )}
         >
           {/* Полоска-ручка: показывает, что шторку можно потянуть, и служит
               удобной областью захвата для жеста закрытия. */}
           <div className="mx-auto mt-3 h-1.5 w-10 flex-none rounded-full bg-line/25" />
-          <div className="overflow-y-auto overscroll-contain px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-4">
-            {bare ? null : (
-              <div className="mb-4 flex items-center justify-between">
-                <Drawer.Title className="text-lg font-bold">{title}</Drawer.Title>
-                <Drawer.Close asChild>
-                  <m.button
-                    type="button"
-                    aria-label="Close"
-                    whileTap={{ scale: 0.95 }}
-                    className="grid h-10 w-10 place-items-center rounded-xl text-sub transition-colors hover:bg-line/[0.08] hover:text-ink"
-                  >
-                    <X size={18} />
-                  </m.button>
-                </Drawer.Close>
-              </div>
+
+          {/* Шапка закреплена: не уезжает вместе с содержимым. */}
+          {bare ? (
+            <Drawer.Title className="sr-only">{title}</Drawer.Title>
+          ) : (
+            <div className="flex flex-none items-center justify-between px-5 pb-3 pt-4">
+              <Drawer.Title className="text-lg font-bold">{title}</Drawer.Title>
+              <Drawer.Close asChild>
+                <m.button
+                  type="button"
+                  aria-label="Close"
+                  whileTap={{ scale: 0.95 }}
+                  className="grid h-10 w-10 place-items-center rounded-xl text-sub transition-colors hover:bg-line/[0.08] hover:text-ink"
+                >
+                  <X size={18} />
+                </m.button>
+              </Drawer.Close>
+            </div>
+          )}
+
+          {/* Прокручивается только середина. min-h-0 обязателен: без него
+              flex-элемент не даёт себя сжать, и прокрутка не появляется вовсе —
+              содержимое просто вылезает за пределы шторки. */}
+          <div
+            data-scroll-area
+            className={cn(
+              'min-h-0 flex-1 overflow-y-auto overscroll-contain px-5',
+              bare && 'pt-4',
+              footer ? 'pb-2' : 'pb-[max(20px,env(safe-area-inset-bottom))]',
             )}
-            {/* Заголовок обязателен для программ чтения с экрана даже в bare-режиме. */}
-            {bare && <Drawer.Title className="sr-only">{title}</Drawer.Title>}
+          >
             {children}
           </div>
+
+          {footer && (
+            <div className="flex-none border-t border-line/10 px-5 pb-[max(16px,calc(env(safe-area-inset-bottom)+var(--tg-bottom,0px)))] pt-3">
+              {footer}
+            </div>
+          )}
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
@@ -107,7 +137,7 @@ function MobileSheet({ open, onOpenChange, title, bare, children }: AdaptiveDial
 
 // ---------- ПК: модальное окно по центру ----------
 
-function DesktopModal({ open, onOpenChange, title, bare, children }: AdaptiveDialogProps) {
+function DesktopModal({ open, onOpenChange, title, bare, footer, children }: AdaptiveDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       {/* forceMount + AnimatePresence: без этого Radix убирает содержимое из
@@ -126,10 +156,13 @@ function DesktopModal({ open, onOpenChange, title, bare, children }: AdaptiveDia
             </Dialog.Overlay>
             <Dialog.Content asChild forceMount>
               <m.div
+                style={{ maxHeight: 'calc(var(--app-vh, 100dvh) - 4rem)' }}
                 className={cn(
                   PANEL,
-                  'fixed left-1/2 top-1/2 z-50 w-[min(520px,calc(100vw-2rem))]',
-                  'max-h-[88vh] overflow-y-auto rounded-3xl border p-5',
+                  // 100dvw вместо 100vw: при видимой полосе прокрутки vw шире
+                  // окна, и окно вылезало за правый край.
+                  'fixed left-1/2 top-1/2 z-50 flex w-[min(520px,calc(100dvw-2rem))] flex-col',
+                  'overflow-hidden rounded-3xl border',
                 )}
                 initial={{ opacity: 0, scale: 0.97, x: '-50%', y: '-48%' }}
                 animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
@@ -139,12 +172,18 @@ function DesktopModal({ open, onOpenChange, title, bare, children }: AdaptiveDia
                 {bare ? (
                   <Dialog.Title className="sr-only">{title}</Dialog.Title>
                 ) : (
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="flex flex-none items-center justify-between px-5 pb-3 pt-5">
                     <Dialog.Title className="text-lg font-bold">{title}</Dialog.Title>
                     <CloseButton />
                   </div>
                 )}
-                {children}
+                <div
+                  data-scroll-area
+                  className={cn('min-h-0 flex-1 overflow-y-auto px-5', bare && 'pt-5', footer ? 'pb-3' : 'pb-5')}
+                >
+                  {children}
+                </div>
+                {footer && <div className="flex-none border-t border-line/10 px-5 pb-5 pt-3">{footer}</div>}
               </m.div>
             </Dialog.Content>
           </Dialog.Portal>

@@ -12,6 +12,7 @@ import { EXPENSE, INCOME, NOTE_MAX, PAYER_MAX, catLabel, typeLabel, type TxType 
 import { subCategoriesOf, subCategoryLabel } from '@/lib/categories'
 import { grpAmount, parseAmount, today } from '@/lib/format'
 import { tgImpact } from '@/lib/telegram'
+import { scrollIntoViewOnFocus } from '@/lib/viewport'
 import { cn } from '@/lib/utils'
 
 export function AddSheet({
@@ -102,7 +103,21 @@ export function AddSheet({
   }
 
   return (
-    <AdaptiveDialog open={open} onOpenChange={onOpenChange} title="New transaction">
+    <AdaptiveDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="New transaction"
+      footer={
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="accent" onClick={save}>
+            Add
+          </Button>
+        </div>
+      }
+    >
       {/* Переключатель типа: подложка не перекрашивается, а переезжает под
           выбранную половину — движение показывает, что это одна вещь в двух
           положениях, а не две отдельные кнопки. layoutId делает это одной
@@ -148,6 +163,9 @@ export function AddSheet({
           placeholder="0"
           value={amount}
           onChange={onAmountChange}
+          // Клавиатура закрывает нижнюю половину экрана — подводим поле в
+          // видимую часть, иначе набирать приходится вслепую.
+          onFocus={() => scrollIntoViewOnFocus(amountRef.current)}
           className={cn('mono h-12 w-full bg-transparent text-2xl font-bold outline-none placeholder:text-faint', accent)}
         />
         <span className="text-lg font-semibold text-faint">₽</span>
@@ -238,14 +256,6 @@ export function AddSheet({
         </span>
       </button>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button variant="ghost" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button variant="accent" onClick={save}>
-          Add
-        </Button>
-      </div>
     </AdaptiveDialog>
   )
 }

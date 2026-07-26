@@ -15,6 +15,8 @@
 // ощутимо (≈17 кБ gzip). Загружается сразу после старта, задолго до первого
 // касания, поэтому вибрация успевает стать доступной.
 type Sdk = typeof import('@telegram-apps/sdk')
+
+import { trackViewport } from './viewport'
 export interface TgUser {
   id: number
   first_name?: string
@@ -43,6 +45,10 @@ export interface TgWebApp {
   setBackgroundColor?: (color: string) => void
   setHeaderColor?: (color: string) => void
   onEvent?: (event: string, cb: () => void) => void
+  /** Версия Bot API, поддерживаемая клиентом («7.10», «8.0»). */
+  version?: string
+  /** Полноэкранный режим, Bot API 8.0+. На старых клиентах отсутствует. */
+  requestFullscreen?: () => void
 }
 
 declare global {
@@ -114,8 +120,23 @@ function loadSdk() {
     })
 }
 
+/** Сравнение версий Bot API вида «8.0»: есть ли у клиента нужный минимум. */
+function versionAtLeast(min: string): boolean {
+  const have = String(TG?.version ?? '0').split('.').map(Number)
+  const need = min.split('.').map(Number)
+  for (let i = 0; i < Math.max(have.length, need.length); i++) {
+    const a = have[i] || 0
+    const b = need[i] || 0
+    if (a !== b) return a > b
+  }
+  return true
+}
+
 export function tgReady() {
   loadSdk()
+  // Слежение за видимой областью запускаем до всего остального: от неё зависят
+  // высоты, и лучше выставить переменные раньше первой отрисовки.
+  trackViewport()
 
   if (!TG) return
   try {
@@ -129,6 +150,17 @@ export function tgReady() {
     TG.onEvent?.('safeAreaChanged', applySafeArea)
     TG.onEvent?.('contentSafeAreaChanged', applySafeArea)
     TG.onEvent?.('viewportChanged', applySafeArea)
+
+    // Полноэкранный режим появился в Bot API 8.0. На старых клиентах метода
+    // просто нет — проверяем версию И оборачиваем в try/catch: клиент может
+    // отдать версию, но отказать в самом вызове.
+    if (versionAtLeast('8.0') && typeof TG.requestFullscreen === 'function') {
+      try {
+        TG.requestFullscreen()
+      } catch {
+        /* клиент не поддерживает — остаёмся в обычном режиме */
+      }
+    }
   } catch {
     /* noop */
   }
