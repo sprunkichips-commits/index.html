@@ -95,6 +95,54 @@ export function getExpenseSources(txs: Tx[]): Record<string, number> {
   return byCat
 }
 
+export interface Transfers {
+  /** Пришло транзитом. */
+  received: number
+  /** Передано дальше. */
+  passedOn: number
+  /** Осталось себе — учтено в доходах как обычный приход. */
+  kept: number
+  /**
+   * Передано сверх полученного, то есть из своих денег. Эта часть — настоящая
+   * трата: она уже разнесена по категориям в getExpenseSources. Показываем её
+   * отдельной строкой, чтобы блок переводов не выглядел посчитанным дважды.
+   */
+  ownMoney: number
+  /** Транзитный расход по категориям, валовыми суммами. */
+  items: { category: string; amount: number }[]
+}
+
+/**
+ * Транзитные операции для отдельного блока «Transfers».
+ *
+ * Суммы здесь ВАЛОВЫЕ и намеренно живут отдельно от getExpenseSources: в
+ * процентах «Where money goes» они не участвуют. Смысл в том, чтобы деньги,
+ * прошедшие насквозь, было видно, но они не выдавали себя за траты.
+ */
+export function getTransfers(txs: Tx[]): Transfers {
+  const byCat: Record<string, number> = {}
+  let received = 0
+  let passedOn = 0
+  for (const t of txs) {
+    if (!t.transit) continue
+    if (t.type === 'Доход') {
+      received = toCents(received + t.amount)
+    } else {
+      passedOn = toCents(passedOn + t.amount)
+      byCat[t.category] = toCents((byCat[t.category] || 0) + t.amount)
+    }
+  }
+  return {
+    received,
+    passedOn,
+    kept: Math.max(0, toCents(received - passedOn)),
+    ownMoney: Math.max(0, toCents(passedOn - received)),
+    items: Object.entries(byCat)
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount),
+  }
+}
+
 /**
  * Итоги прихода/расхода по произвольным «корзинам» (день/неделя/месяц/год) с
  * зачётом транзита внутри каждой корзины. keyOf возвращает ключ корзины или null

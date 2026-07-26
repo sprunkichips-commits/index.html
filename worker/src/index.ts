@@ -23,6 +23,7 @@ import {
   getMonthlyTotals,
   getSubCategoryStats,
   getTotals,
+  getTransfers,
   type Range,
 } from './queries'
 
@@ -355,10 +356,11 @@ app.get('/api/stats', async (c) => {
   const range = rangeFromQuery(c, userId)
   if (!range) return c.json(badRequest('invalid date range'), 400)
 
-  const [totals, income, expense] = await Promise.all([
+  const [totals, income, expense, transfers] = await Promise.all([
     getTotals(c.env.DB, range),
     getCategoryStats(c.env.DB, range, 'income'),
     getCategoryStats(c.env.DB, range, 'expense'),
+    getTransfers(c.env.DB, range),
   ])
 
   return c.json({
@@ -371,6 +373,16 @@ app.get('/api/stats', async (c) => {
     },
     incomeSources: income.map((s) => ({ ...s, total: centsToRub(s.totalCents) })),
     expenseCategories: expense.map((s) => ({ ...s, total: centsToRub(s.totalCents) })),
+    // Транзит отдельным набором: в expenseCategories его нет ни в суммах, ни в
+    // процентах — это деньги, прошедшие насквозь, а не траты пользователя.
+    transfers: {
+      ...transfers,
+      received: centsToRub(transfers.receivedCents),
+      passedOn: centsToRub(transfers.passedOnCents),
+      kept: centsToRub(transfers.keptCents),
+      ownMoney: centsToRub(transfers.ownMoneyCents),
+      items: transfers.items.map((t) => ({ ...t, total: centsToRub(t.totalCents) })),
+    },
   })
 })
 

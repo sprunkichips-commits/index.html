@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, ChevronRight, MousePointerClick } from 'lucide-react'
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, ChevronRight, MousePointerClick } from 'lucide-react'
 import { useStore } from '@/store/StoreContext'
 import { catLabel, computeStats, MONTHS, MS, typeLabel, type TxType } from '@/lib/data'
 import { hasSubCategories } from '@/lib/categories'
-import { bucketTotals, getExpenseSources, getIncomeSources } from '@/lib/breakdown'
+import { bucketTotals, getExpenseSources, getIncomeSources, getTransfers } from '@/lib/breakdown'
 import { rub } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
@@ -76,7 +76,11 @@ export function Stats() {
       })
       .sort((a, b) => b.value - a.value)
 
-    return { months, days, years, byYear, cats, total, nd }
+    // Переводы (транзит) — отдельным набором. В cats и в total они не входят,
+    // поэтому проценты «Where money goes» считаются только по реальным тратам.
+    const transfers = getTransfers(data.transactions.filter(inMonth(y, m)))
+
+    return { months, days, years, byYear, cats, total, nd, transfers }
   }, [data.transactions, cursor.y, cursor.m, view])
 
   // Данные графика по режиму
@@ -248,6 +252,62 @@ export function Stats() {
           </div>
         )}
       </Card>
+
+      {/* Переводы. Отдельный блок в самом низу: деньги, прошедшие насквозь,
+          видно, но в суммах и процентах выше их нет. */}
+      {(agg.transfers.passedOn > 0 || agg.transfers.received > 0) && (
+        <Card className="p-4">
+          <div className="mb-1 text-sm font-semibold">Transfers</div>
+          <p className="mb-3 text-xs leading-relaxed text-faint">
+            Money that passed through you. Not counted as your spending and excluded from the
+            percentages above.
+          </p>
+
+          <div className="flex flex-col">
+            {agg.transfers.items.map((t, i) => (
+              <div
+                key={t.category}
+                className={cn('flex items-center gap-3 py-2.5', i && 'border-t border-line/8')}
+              >
+                <span className="grid h-10 w-10 flex-none place-items-center rounded-2xl bg-line/[0.07] text-sub">
+                  <ArrowLeftRight size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{catLabel(t.category)}</div>
+                  <div className="text-xs text-faint">passed on</div>
+                </div>
+                <div className="mono text-sm font-semibold text-sub">{rub(t.amount)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 space-y-1 border-t border-line/8 pt-3 text-xs text-sub">
+            <div className="flex justify-between">
+              <span>Received</span>
+              <span className="mono">{rub(agg.transfers.received)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Passed on</span>
+              <span className="mono">{rub(agg.transfers.passedOn)}</span>
+            </div>
+            {agg.transfers.kept > 0 && (
+              <div className="flex justify-between font-semibold text-pos">
+                <span>Kept</span>
+                <span className="mono">{rub(agg.transfers.kept)}</span>
+              </div>
+            )}
+            {/* Передали больше, чем получили: разница — настоящая трата, и она
+                уже разнесена по категориям выше. Говорим об этом прямо, иначе
+                кажется, что сумма посчитана дважды. */}
+            {agg.transfers.ownMoney > 0 && (
+              <div className="flex justify-between font-semibold text-neg">
+                <span>From your own money — counted in expenses above</span>
+                <span className="mono">{rub(agg.transfers.ownMoney)}</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       <CategoryDetailSheet categoryId={detailCat} onClose={() => setDetailCat(null)} />
       <IncomeSourceSheet categoryId={incomeCat} onClose={() => setIncomeCat(null)} />

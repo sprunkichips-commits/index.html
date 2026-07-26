@@ -126,6 +126,77 @@ export async function getCategoryStats(
   return results ?? []
 }
 
+export interface TransferStat {
+  categoryId: string
+  name: string
+  color: string | null
+  icon: string | null
+  /** Валовая сумма, переданная дальше по этой категории. */
+  totalCents: number
+}
+
+export interface Transfers {
+  /** Пришло транзитом. */
+  receivedCents: number
+  /** Передано дальше. */
+  passedOnCents: number
+  /** Осталось себе — уже учтено в доходах как обычный приход. */
+  keptCents: number
+  /**
+   * Передано сверх полученного, то есть из своих денег. Эта часть — настоящая
+   * трата и уже посчитана в expenseCategories; в блоке переводов её показываем
+   * отдельной строкой, чтобы сумма не выглядела посчитанной дважды.
+   */
+  ownMoneyCents: number
+  items: TransferStat[]
+}
+
+/**
+ * Транзитные расходы отдельным набором — деньги, прошедшие насквозь.
+ *
+ * Возвращаются ВАЛОВЫМИ суммами и намеренно изолированы от expenseCategories:
+ * там они не участвуют ни в суммах, ни в процентах (см. factor в
+ * getCategoryStats — для транзита он равен нулю, пока переведено не больше,
+ * чем получено). Показать их надо, посчитать за траты — нельзя.
+ */
+export async function getTransfers(db: D1Database, r: Range): Promise<Transfers> {
+  const poolSql = `
+    SELECT
+      COALESCE(SUM(CASE WHEN type='income'  THEN amount_cents END), 0) AS t_in,
+      COALESCE(SUM(CASE WHEN type='expense' THEN amount_cents END), 0) AS t_out
+    FROM transactions
+    WHERE user_id = ?1 AND date BETWEEN ?2 AND ?3 AND transit = 1`
+
+  const itemsSql = `
+    SELECT
+      t.category_id AS categoryId,
+      COALESCE(c.name, t.category_id) AS name,
+      c.color AS color,
+      c.icon  AS icon,
+      SUM(t.amount_cents) AS totalCents
+    FROM transactions t
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE t.user_id = ?1 AND t.date BETWEEN ?2 AND ?3
+      AND t.transit = 1 AND t.type = 'expense'
+    GROUP BY t.category_id
+    ORDER BY totalCents DESC`
+
+  const [pool, items] = await Promise.all([
+    db.prepare(poolSql).bind(r.userId, r.from, r.to).first<{ t_in: number; t_out: number }>(),
+    db.prepare(itemsSql).bind(r.userId, r.from, r.to).all<TransferStat>(),
+  ])
+
+  const receivedCents = pool?.t_in ?? 0
+  const passedOnCents = pool?.t_out ?? 0
+  return {
+    receivedCents,
+    passedOnCents,
+    keptCents: Math.max(0, receivedCents - passedOnCents),
+    ownMoneyCents: Math.max(0, passedOnCents - receivedCents),
+    items: items.results ?? [],
+  }
+}
+
 /**
  * Детализация одной категории по подкатегориям: сумма и процент от общей суммы
  * родителя — всё считается в SQL. Операции без подкатегории попадают в бакет

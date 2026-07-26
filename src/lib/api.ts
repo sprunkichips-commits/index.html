@@ -194,11 +194,27 @@ export interface ApiCategoryStat {
   percent: number
 }
 
+/** Транзит: деньги, прошедшие насквозь. Отдельно от expenseCategories —
+ *  в тратах и процентах их нет. */
+export interface ApiTransfers {
+  receivedCents: number
+  passedOnCents: number
+  keptCents: number
+  /** Передано сверх полученного: настоящая трата, уже учтённая в категориях. */
+  ownMoneyCents: number
+  received: number
+  passedOn: number
+  kept: number
+  ownMoney: number
+  items: (ApiCategoryStat & { total: number })[]
+}
+
 export interface ApiStats {
   range: { from: string; to: string }
   totals: { incomeCents: number; expenseCents: number; netCents: number; income: number; expense: number; net: number }
   incomeSources: ApiCategoryStat[]
   expenseCategories: ApiCategoryStat[]
+  transfers: ApiTransfers
 }
 
 export interface ApiSubCategoryStats {
