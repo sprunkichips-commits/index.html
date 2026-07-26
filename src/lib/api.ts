@@ -103,7 +103,15 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       // достаточно same-origin — сторонним сайтам cookie не отдаём.
       credentials: 'same-origin',
       headers: {
-        'X-Telegram-Init-Data': TG?.initData || '',
+        // Подпись Telegram уходит двумя путями: свой заголовок и стандартный
+        // Authorization в схеме «tma …». Некоторые прослойки вырезают
+        // незнакомые заголовки — тогда сработает второй, и сервер примет любой.
+        ...(TG?.initData
+          ? {
+              'X-Telegram-Init-Data': TG.initData,
+              Authorization: `tma ${TG.initData}`,
+            }
+          : {}),
         ...(body != null ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body != null ? JSON.stringify(body) : undefined,

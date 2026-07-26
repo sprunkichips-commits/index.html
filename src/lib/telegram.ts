@@ -24,6 +24,7 @@ export interface TgWebApp {
   /** Отступы элементов самого Telegram (кнопки «Закрыть», «…»). Bot API 8.0+. */
   contentSafeAreaInset?: { top: number; bottom: number; left: number; right: number }
   showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void
+  showAlert?: (message: string, callback?: () => void) => void
   setBackgroundColor?: (color: string) => void
   setHeaderColor?: (color: string) => void
   onEvent?: (event: string, cb: () => void) => void
@@ -113,6 +114,28 @@ export function tgConfirm(message: string): Promise<boolean> {
     })
   }
   return Promise.resolve(safeWindowConfirm(message))
+}
+
+/**
+ * Показать сообщение попапом. Нужно потому, что внутри Telegram нет консоли
+ * разработчика: ошибка сети или отказ сервера иначе видны только как тост
+ * «не сохранилось», без причины. showAlert — нативный попап Telegram
+ * (Bot API 6.2+), window.alert — запас для старых клиентов и браузера.
+ */
+export function tgAlert(message: string): void {
+  if (TG && typeof TG.showAlert === 'function') {
+    try {
+      TG.showAlert(message)
+      return
+    } catch {
+      /* старый клиент — падаем в window.alert */
+    }
+  }
+  try {
+    window.alert(message)
+  } catch {
+    /* некуда показать — молча, ронять приложение из-за сообщения нельзя */
+  }
 }
 
 function safeWindowConfirm(message: string): boolean {

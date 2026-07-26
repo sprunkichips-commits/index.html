@@ -174,9 +174,23 @@ export interface AuthEnv {
  * initData принимаем в заголовке X-Telegram-Init-Data (не в URL: адреса
  * попадают в логи и историю, а initData — чувствительная строка).
  */
+/**
+ * Достаёт initData из запроса. Основной заголовок — X-Telegram-Init-Data;
+ * Authorization принимается как второй вариант (в том числе в виде
+ * «tma <initData>» — так это оформляет официальный SDK Telegram).
+ */
+function readInitData(c: { req: { header: (k: string) => string | undefined } }): string {
+  const direct = c.req.header('X-Telegram-Init-Data')
+  if (direct) return direct
+  const auth = c.req.header('Authorization') || ''
+  if (/^tma\s+/i.test(auth)) return auth.replace(/^tma\s+/i, '')
+  // Bearer/Basic — это не initData, такие схемы не трогаем.
+  return /^(bearer|basic)\s/i.test(auth) ? '' : auth
+}
+
 export const telegramAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   // Способ 1: приложение внутри Telegram присылает подписанный initData.
-  const initData = c.req.header('X-Telegram-Init-Data') || ''
+  const initData = readInitData(c)
   const res = initData
     ? await verifyInitData(initData, c.env.BOT_TOKEN)
     : { ok: false as const, reason: 'no initData' }
@@ -205,6 +219,18 @@ export const telegramAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
       c.set('user', { id: Number(devUser), first_name: 'Dev' })
       return next()
     }
+    // В логи — только причина отказа, без самой строки initData.
+    console.log(
+      'AUTH REJECTED',
+      JSON.stringify({
+        path: c.req.path,
+        method: c.req.method,
+        reason: res.reason,
+        initDataLength: initData.length,
+        botTokenConfigured: !!c.env.BOT_TOKEN,
+        cookie: c.req.header('Cookie') ? 'present' : 'none',
+      }),
+    )
     return c.json({ error: 'unauthorized', reason: res.reason }, 401)
   }
 

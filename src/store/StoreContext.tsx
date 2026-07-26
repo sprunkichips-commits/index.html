@@ -37,9 +37,9 @@ import {
   bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, sset,
 } from '@/lib/storage'
 import { localDateStr } from '@/lib/goals'
-import { api, hasInitData, resolveAuth, type AuthInfo } from '@/lib/api'
+import { api, ApiError, hasInitData, resolveAuth, type AuthInfo } from '@/lib/api'
 import { fullRange, toCloudPayload, toLocalTx } from '@/lib/cloudSync'
-import { hasCloud, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
+import { hasCloud, tgAlert, tgPaintColors, tgReady, tgUser } from '@/lib/telegram'
 
 export type Theme = 'dark' | 'light'
 /** Стиль графиков статистики: classic — столбцы, studio — линия (как в YouTube Studio). */
@@ -309,16 +309,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       persist(next)
 
       if (authedRef.current) {
-        api
-          .addTransaction(toCloudPayload({ ...input, category, subCategory, payer, note, amount }))
-          .then(() => {
+        void (async () => {
+          try {
+            await api.addTransaction(
+              toCloudPayload({ ...input, category, subCategory, payer, note, amount }),
+            )
             setCloud('synced')
             syncCloud()
-          })
-          .catch(() => {
+          } catch (e) {
+            // Раньше здесь на любую ошибку писался тост «No connection», и
+            // отказ сервера (401, 400) выглядел как пропавшая сеть. Внутри
+            // Telegram консоли нет, поэтому настоящую причину показываем
+            // попапом — иначе её негде увидеть.
             setCloud('offline')
-            toast('No connection — not saved to the cloud')
-          })
+            const msg = e instanceof ApiError ? e.message : 'Unknown error'
+            const code = e instanceof ApiError ? ` [${e.status || 'network'}]` : ''
+            tgAlert(`Not saved to the cloud${code}\n\n${msg}`)
+            toast('Not saved to the cloud')
+          }
+        })()
       }
       toast('Added')
       return true

@@ -30,6 +30,35 @@ type Env = AuthEnv & { Bindings: AuthEnv['Bindings'] & { ASSETS?: Fetcher } }
 
 const app = new Hono<Env>()
 
+// ---------- CORS ----------
+// Строго говоря, здесь он не нужен: фронтенд и API отдаёт один и тот же Worker,
+// значит запросы same-origin, и preflight браузер для них не отправляет.
+// Оставлено осознанно — как страховка, если приложение когда-нибудь откроют с
+// другого домена (например, старый адрес GitHub Pages), и чтобы «CORS» можно
+// было раз и навсегда исключить из списка подозреваемых.
+//
+// Allow-Credentials здесь НЕТ, и это важно: со звёздочкой в Allow-Origin
+// браузер отказывается отправлять cookie на другой домен, поэтому сессия
+// остаётся недоступной сторонним сайтам. Если однажды понадобится
+// Allow-Credentials, звёздочку придётся заменить на конкретный origin —
+// иначе любой сайт сможет читать чужие финансы от имени вошедшего.
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Telegram-Init-Data',
+  'Access-Control-Max-Age': '86400',
+}
+
+// Preflight: отвечаем до всякой авторизации. OPTIONS не несёт ни initData,
+// ни cookie, поэтому проверять в нём нечего — иначе preflight получал бы 401
+// и настоящий запрос браузер бы уже не отправил.
+app.options('/api/*', () => new Response(null, { status: 200, headers: CORS_HEADERS }))
+
+app.use('/api/*', async (c, next) => {
+  await next()
+  for (const [k, v] of Object.entries(CORS_HEADERS)) c.header(k, v)
+})
+
 // ---------- Утилиты ----------
 
 /** Проверка initData без выброса: возвращает id пользователя или null. */
@@ -214,6 +243,26 @@ app.post('/api/transactions', async (c) => {
   } catch {
     return c.json(badRequest('invalid JSON'), 400)
   }
+
+  // Диагностика для Real-time logs в панели Cloudflare.
+  // Значения initData, Authorization и Cookie НЕ пишем: это действующие
+  // пропуски (initData подписан и живёт сутки, cookie — 30 дней). Логи видны
+  // всем, у кого есть доступ к аккаунту, и хранятся дольше самих пропусков,
+  // поэтому пишем только длину и факт наличия — для отладки этого достаточно.
+  console.log(
+    'POST /api/transactions',
+    JSON.stringify({
+      userId,
+      body,
+      auth: {
+        initDataHeader: (c.req.header('X-Telegram-Init-Data') || '').length,
+        authorizationHeader: (c.req.header('Authorization') || '').length,
+        cookie: c.req.header('Cookie') ? 'present' : 'none',
+      },
+      headers: [...new Set([...Object.keys(c.req.header())])].sort(),
+      origin: c.req.header('Origin') ?? 'none',
+    }),
+  )
 
   // --- Валидация. Клиенту не доверяем ничего, кроме уже проверенного userId. ---
   const date = String(body.date ?? '')
