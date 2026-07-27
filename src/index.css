@@ -197,12 +197,17 @@
   will-change: transform;
 }
 
-/* Появление шторки: 200 мс, ease-out. У vaul по умолчанию полсекунды с
-   собственной кривой — на телефоне это читается как «долго и вязко».
+/* Шторка появляется БЕЗ анимации.
+   Дело в том, что она и клавиатура — две разные анимации, и синхронизировать их
+   нельзя: скоростью клавиатуры управляет iOS, а не мы. Любая длительность у
+   шторки читается как рассинхрон. Мгновенное появление синхронизировать не с
+   чем — шторка просто уже на месте, когда клавиатура начинает выезжать.
+   1ms, а не 0: vaul дожидается transitionend, чтобы убрать шторку из дерева,
+   а при нулевой длительности это событие не гарантировано.
    !important обязателен: vaul задаёт transition инлайновым стилем. */
-[data-vaul-drawer] {
-  transition-duration: 200ms !important;
-  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1) !important;
+[data-vaul-drawer],
+[data-vaul-overlay] {
+  transition-duration: 1ms !important;
 }
 
 /* Элементы, которым нечего делать на экране с открытой клавиатурой:
@@ -228,8 +233,5 @@
 @media (prefers-reduced-motion: reduce) {
   .kb-lift {
     transition: none;
-  }
-  [data-vaul-drawer] {
-    transition-duration: 1ms !important;
   }
 }

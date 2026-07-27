@@ -2,10 +2,12 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { DayPicker } from 'react-day-picker'
 
 /**
- * Сама сетка календаря, вынесенная в отдельный модуль ради ленивой загрузки:
- * при старте приложения календарь не нужен, он приезжает при первом открытии
- * (см. DatePicker). Для Mini App это заметно — трафик мобильный, и лишние
- * килобайты задерживают первый экран.
+ * Сетка календаря в манере системного iOS: месяц с годом крупно слева, стрелки
+ * справа, дни в кружках, одна буква на день недели. Прежний вид был плотным и
+ * «табличным»; по крупному кружку ещё и попадать пальцем проще.
+ *
+ * Вынесено в отдельный модуль ради ленивой загрузки: при старте приложения
+ * календарь не нужен, он приезжает при первом открытии (см. CalendarPanel в EntryTiles).
  */
 export default function CalendarBody({
   selected,
@@ -22,43 +24,52 @@ export default function CalendarBody({
       defaultMonth={selected}
       weekStartsOn={1}
       showOutsideDays
+      // Одна буква на день недели, как в системном календаре.
+      formatters={{ formatWeekdayName: (d) => WEEKDAYS[d.getDay()] }}
       components={{
         Chevron: ({ orientation }) =>
-          orientation === 'left' ? <ChevronLeft size={17} /> : <ChevronRight size={17} />,
+          orientation === 'left' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />,
       }}
-      className="text-sm"
       classNames={DP}
     />
   )
 }
 
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
 /** Классы react-day-picker под тёмную тему приложения. */
 const DP = {
   root: 'w-full',
-  months: 'w-full',
+  // relative именно здесь: стрелки навигации — потомок months и позиционируются
+  // absolute. Без точки отсчёта они уезжали к ближайшему позиционированному
+  // родителю, то есть в шапку шторки, к кнопке закрытия. На month ставить
+  // бесполезно — nav ему не потомок, а сосед.
+  months: 'relative w-full',
   month: 'w-full',
-  month_caption: 'flex h-9 items-center justify-center',
-  caption_label: 'text-sm font-semibold text-ink',
-  nav: 'absolute inset-x-0 top-3 flex items-center justify-between px-1',
+  // Подпись месяца прижата влево, стрелки — вправо: как в системном календаре.
+  month_caption: 'flex h-10 items-center pl-1',
+  caption_label: 'text-[17px] font-bold text-ink',
+  nav: 'absolute right-0 top-1 flex items-center gap-1',
   button_previous:
-    'grid h-8 w-8 place-items-center rounded-lg text-sub transition-colors hover:bg-line/[0.08] hover:text-ink disabled:opacity-30',
+    'grid h-9 w-9 place-items-center rounded-full text-accent transition-colors hover:bg-line/[0.08] disabled:opacity-30',
   button_next:
-    'grid h-8 w-8 place-items-center rounded-lg text-sub transition-colors hover:bg-line/[0.08] hover:text-ink disabled:opacity-30',
+    'grid h-9 w-9 place-items-center rounded-full text-accent transition-colors hover:bg-line/[0.08] disabled:opacity-30',
   month_grid: 'w-full border-collapse',
   weekdays: 'grid grid-cols-7',
-  weekday: 'pb-1 text-center text-[11px] font-medium uppercase tracking-wide text-faint',
+  weekday: 'pb-1.5 pt-1 text-center text-[12px] font-semibold text-faint',
   weeks: '',
   week: 'grid grid-cols-7',
-  day: 'p-0.5 text-center',
+  day: 'p-0 text-center',
+  // Круглая ячейка во всю ширину колонки — палец попадает без прицеливания.
   day_button:
-    'mx-auto grid h-9 w-9 place-items-center rounded-xl text-sm text-ink transition-colors hover:bg-line/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+    'mx-auto grid aspect-square w-full max-w-[40px] place-items-center rounded-full text-[17px] text-ink transition-colors hover:bg-line/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
   // Подсветка «сегодня» — только пока этот день НЕ выбран. Иначе два правила
   // задают цвет текста с одинаковой специфичностью, и победитель зависит от
-  // порядка в собранном CSS: получался зелёный текст на красном фоне.
+  // порядка в собранном CSS: получался цветной текст на цветном фоне.
   today: '[&:not([data-selected])_button]:font-bold [&:not([data-selected])_button]:text-accent',
   selected:
     '[&_button]:bg-[var(--dp-accent)] [&_button]:text-[var(--dp-ink)] [&_button]:font-semibold [&_button:hover]:bg-[var(--dp-accent)] [&_button:hover]:brightness-110',
-  outside: '[&_button]:text-faint [&_button]:opacity-45',
+  outside: '[&_button]:text-faint [&_button]:opacity-40',
   disabled: '[&_button]:opacity-30 [&_button]:pointer-events-none',
   hidden: 'invisible',
 }

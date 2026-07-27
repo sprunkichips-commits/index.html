@@ -4,9 +4,8 @@ import { ArrowLeftRight, Check } from 'lucide-react'
 import { AdaptiveDialog } from './ui/adaptive-dialog'
 import { Button } from './ui/button'
 import { Collapse } from './ui/collapse'
-import { DatePicker } from './ui/date-picker'
 import { Input } from './ui/input'
-import { CategoryPicker } from './CategoryPicker'
+import { CalendarPanel, CategoryGrid, CategoryTile, DateTile, type EntryPanel } from './EntryTiles'
 import { useStore } from '@/store/StoreContext'
 import { EXPENSE, INCOME, NOTE_MAX, PAYER_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
 import { subCategoriesOf, subCategoryLabel } from '@/lib/categories'
@@ -38,6 +37,9 @@ export function AddSheet({
   // Подсветку включаем только после попытки сохранить — краснеть заранее
   // на форме, которую ещё не заполняли, незачем.
   const [showErrors, setShowErrors] = useState(false)
+  // Раскрыта либо категория, либо дата, либо ничего. Одна панель за раз —
+  // высота формы остаётся предсказуемой, и вторая не выталкивает первую.
+  const [panel, setPanel] = useState<EntryPanel>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const caretSig = useRef<number | null>(null) // позиция курсора в «значащих» символах
 
@@ -78,6 +80,7 @@ export function AddSheet({
       setDate(today())
       setNote('')
       setShowErrors(false)
+      setPanel(null)
     }
   }, [open, initialType])
 
@@ -216,17 +219,51 @@ export function AddSheet({
         <span className="text-lg font-semibold text-faint">₽</span>
       </div>
 
-      <label className="mb-1.5 block text-xs font-medium text-sub">Category</label>
-      <div className={cn(subs.length ? 'mb-2' : 'mb-3')}>
-        <CategoryPicker
+      {/* Категория и дата одной строкой плитками. Панель выбора раскрывается
+          под ними и только одна за раз. */}
+      <div className="mb-2 flex gap-2">
+        <CategoryTile
           value={category}
-          onChange={setCategory}
-          options={list}
           type={type}
-          transactions={data.transactions}
+          open={panel === 'category'}
           invalid={showErrors && categoryBad}
+          onToggle={() => setPanel((p) => (p === 'category' ? null : 'category'))}
+        />
+        <DateTile
+          value={date}
+          open={panel === 'date'}
+          onToggle={() => setPanel((p) => (p === 'date' ? null : 'date'))}
         />
       </div>
+
+      <AnimatePresence initial={false} mode="wait">
+        {panel === 'category' && (
+          <CategoryGrid
+            key="cat"
+            value={category}
+            onChange={(v) => {
+              setCategory(v)
+              setPanel(null) // выбрал — панель закрылась, лишнего действия нет
+            }}
+            options={list}
+            type={type}
+            transactions={data.transactions}
+          />
+        )}
+        {panel === 'date' && (
+          <CalendarPanel
+            key="date"
+            value={date}
+            onChange={(v) => {
+              setDate(v)
+              setPanel(null)
+            }}
+            accent={type === 'Доход' ? 'pos' : 'neg'}
+          />
+        )}
+      </AnimatePresence>
+
+      <div className="h-1" />
 
       {/* Подкатегория — только для категорий с детализацией (напр. Groceries).
           Тоже кнопками, а не списком: выпадашка так же уводила фокус. */}
@@ -270,14 +307,6 @@ export function AddSheet({
           className="mb-3"
         />
       </Collapse>
-
-      <label className="mb-1.5 block text-xs font-medium text-sub">Date</label>
-      <DatePicker
-        value={date}
-        onChange={setDate}
-        accent={type === 'Доход' ? 'pos' : 'neg'}
-        className="mb-3"
-      />
 
       <label className="mb-1.5 block text-xs font-medium text-sub">
         Note <span className="text-faint">(optional)</span>
