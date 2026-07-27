@@ -24,7 +24,7 @@ function readPx(name: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-function apply() {
+function measure() {
   const root = document.documentElement
   const vv = window.visualViewport
 
@@ -44,11 +44,30 @@ function apply() {
 
   root.style.setProperty('--app-vh', `${Math.round(usable)}px`)
   root.style.setProperty('--kb', `${Math.round(covered)}px`)
+  // Состояние клавиатуры — атрибутом на <html>, а НЕ состоянием React.
+  // Перерисовывать дерево на каждое событие клавиатуры значит гарантированно
+  // получить рывок; CSS по атрибуту переключается без единого ре-рендера.
+  root.dataset.kb = covered > 40 ? 'open' : 'closed'
 
   // Нижняя безопасная зона (вырез/жестовая полоса). В Bot API 8.0 Telegram
   // отдаёт её сам; env() остаётся запасным вариантом в обычном браузере.
   const safeBottom = TG?.safeAreaInset?.bottom ?? 0
   root.style.setProperty('--tg-bottom', `${Math.max(0, safeBottom)}px`)
+}
+
+let raf = 0
+
+/**
+ * Пересчёт не чаще, чем браузер рисует. visualViewport на iOS шлёт resize
+ * десятками за время выезда клавиатуры; без этого мы считали бы раскладку
+ * чаще, чем она вообще может обновиться.
+ */
+function apply() {
+  if (raf) return
+  raf = requestAnimationFrame(() => {
+    raf = 0
+    measure()
+  })
 }
 
 let started = false
@@ -61,7 +80,7 @@ export function trackViewport() {
   if (started || typeof window === 'undefined') return
   started = true
 
-  apply()
+  measure() // первый замер — сразу, без ожидания кадра
 
   // resize — появление и скрытие клавиатуры, поворот экрана.
   // scroll у visualViewport — iOS сдвигает видимую область, не меняя её высоты;
@@ -85,15 +104,21 @@ export function trackViewport() {
 
 /**
  * Подводит поле ввода под видимую область после появления клавиатуры.
+ *
+ * block: 'nearest' — прокрутка на минимально необходимое расстояние. Раньше
+ * стояло 'center': поле уезжало в середину и уводило вниз всё, что под ним, —
+ * с открытой клавиатурой первый ряд категорий переставал влезать, хотя до этого
+ * был виден. Если поле и так на виду, прокрутки не происходит вовсе.
+ *
  * Задержка нужна потому, что на iOS клавиатура выезжает анимацией, и до её
  * окончания visualViewport ещё не знает итоговой высоты.
  */
 export function scrollIntoViewOnFocus(el: HTMLElement | null, delay = 260) {
   if (!el) return
   window.setTimeout(() => {
-    apply()
+    measure()
     try {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     } catch {
       el.scrollIntoView(false)
     }

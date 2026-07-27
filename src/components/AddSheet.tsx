@@ -6,14 +6,16 @@ import { Button } from './ui/button'
 import { Collapse } from './ui/collapse'
 import { DatePicker } from './ui/date-picker'
 import { Input } from './ui/input'
-import { Select } from './ui/select'
+import { CategoryPicker } from './CategoryPicker'
 import { useStore } from '@/store/StoreContext'
 import { EXPENSE, INCOME, NOTE_MAX, PAYER_MAX, catLabel, typeLabel, type TxType } from '@/lib/data'
 import { subCategoriesOf, subCategoryLabel } from '@/lib/categories'
 import { grpAmount, parseAmount, today } from '@/lib/format'
-import { tgImpact } from '@/lib/telegram'
+import { tgImpact, tgNotify } from '@/lib/telegram'
 import { scrollIntoViewOnFocus } from '@/lib/viewport'
 import { cn } from '@/lib/utils'
+
+const FORM_ID = 'add-tx-form'
 
 export function AddSheet({
   open,
@@ -24,7 +26,7 @@ export function AddSheet({
   onOpenChange: (v: boolean) => void
   initialType?: TxType
 }) {
-  const { addTx, toast } = useStore()
+  const { addTx, toast, data } = useStore()
   const [type, setType] = useState<TxType>(initialType)
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
@@ -33,6 +35,9 @@ export function AddSheet({
   const [payer, setPayer] = useState('')
   const [date, setDate] = useState(today())
   const [note, setNote] = useState('')
+  // Подсветку включаем только после попытки сохранить — краснеть заранее
+  // на форме, которую ещё не заполняли, незачем.
+  const [showErrors, setShowErrors] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
   const caretSig = useRef<number | null>(null) // позиция курсора в «значащих» символах
 
@@ -72,6 +77,7 @@ export function AddSheet({
       setPayer('')
       setDate(today())
       setNote('')
+      setShowErrors(false)
     }
   }, [open, initialType])
 
@@ -93,10 +99,33 @@ export function AddSheet({
   const list = type === 'Доход' ? INCOME : EXPENSE
   const subs = subCategoriesOf(category)
 
-  function save() {
-    const ok = addTx({ type, amount: parseAmount(amount), category, subCategory, transit, payer, date, note })
+  const amountValue = parseAmount(amount)
+  const amountBad = amountValue <= 0
+  const categoryBad = !category
+
+  /**
+   * Подтверждение. Вызывается и по кнопке, и по return с клавиатуры (через
+   * onSubmit формы — на iOS это единственный надёжный способ поймать return).
+   * Пустая сумма или невыбранная категория шторку НЕ закрывают: подсвечиваем
+   * то, чего не хватает, и оставляем всё как есть.
+   */
+  function save(e?: React.FormEvent) {
+    e?.preventDefault()
+    if (amountBad || categoryBad) {
+      setShowErrors(true)
+      // Отклик здесь, а не в addTx: до него дело не доходит, а без вибрации
+      // отказ на телефоне легко не заметить.
+      tgNotify('error')
+      // Фокус возвращаем на сумму, только если проблема именно в ней: иначе
+      // клавиатура закроется и раскладка поедет ради ничего.
+      if (amountBad) amountRef.current?.focus()
+      toast(amountBad ? 'Enter an amount' : 'Pick a category')
+      return
+    }
+    const ok = addTx({ type, amount: amountValue, category, subCategory, transit, payer, date, note })
     if (!ok) {
-      toast('Enter an amount and a category')
+      setShowErrors(true)
+      toast('Could not save')
       return
     }
     onOpenChange(false)
@@ -108,16 +137,20 @@ export function AddSheet({
       onOpenChange={onOpenChange}
       title="New transaction"
       footer={
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button variant="accent" onClick={save}>
-            Add
+        // Запасной путь: когда клавиатура открыта, подтверждают через return, и
+        // кнопка только занимала бы место. Класс kb-only-closed прячет её по
+        // атрибуту на <html> — без участия React, то есть без перерисовки.
+        <div className="kb-only-closed">
+          <Button type="submit" form={FORM_ID} variant="accent" className="w-full">
+            Save
           </Button>
         </div>
       }
     >
+      {/* Форма нужна ради return: на iOS нажатие «done» шлёт submit, и это
+          единственный надёжный способ его поймать. id связывает её с кнопкой,
+          которая живёт в закреплённой панели снизу, вне самой формы. */}
+      <form id={FORM_ID} onSubmit={save}>
       {/* Переключатель типа: подложка не перекрашивается, а переезжает под
           выбранную половину — движение показывает, что это одна вещь в двух
           положениях, а не две отдельные кнопки. layoutId делает это одной
@@ -154,12 +187,24 @@ export function AddSheet({
       </div>
 
       <label className="mb-1.5 block text-xs font-medium text-sub">Amount</label>
-      <div className="mb-3 flex items-center gap-2 rounded-xl border border-line/12 bg-line/[0.04] px-3">
+      <div
+        className={cn(
+          'mb-3 flex items-center gap-2 rounded-xl border bg-line/[0.04] px-3 transition-colors',
+          showErrors && amountBad ? 'border-neg/60 ring-1 ring-neg/40' : 'border-line/12',
+        )}
+      >
         <input
           ref={amountRef}
           autoFocus
+          data-autofocus
           type="text"
-          inputMode="decimal"
+          // inputMode НЕ задаём намеренно: с numeric/decimal на iOS исчезает
+          // кнопка return, а подтверждение у нас именно на ней. Цифры набираются
+          // переключателем «123» обычной клавиатуры.
+          enterKeyHint="done"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
           placeholder="0"
           value={amount}
           onChange={onAmountChange}
@@ -173,27 +218,40 @@ export function AddSheet({
 
       <label className="mb-1.5 block text-xs font-medium text-sub">Category</label>
       <div className={cn(subs.length ? 'mb-2' : 'mb-3')}>
-        <Select
+        <CategoryPicker
           value={category}
-          onValueChange={setCategory}
-          placeholder="Pick a category…"
+          onChange={setCategory}
           options={list}
-          labelFor={catLabel}
-          ariaLabel="Category"
+          type={type}
+          transactions={data.transactions}
+          invalid={showErrors && categoryBad}
         />
       </div>
 
-      {/* Подкатегория — только для категорий с детализацией (напр. Groceries) */}
+      {/* Подкатегория — только для категорий с детализацией (напр. Groceries).
+          Тоже кнопками, а не списком: выпадашка так же уводила фокус. */}
       <Collapse show={subs.length > 0}>
-        <div className="mb-3">
-          <Select
-            value={subCategory}
-            onValueChange={setSubCategory}
-            placeholder="Subcategory (optional)…"
-            options={subs.map((s) => s.id)}
-            labelFor={subCategoryLabel}
-            ariaLabel="Subcategory"
-          />
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {subs.map((sub) => (
+            <button
+              key={sub.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setSubCategory(subCategory === sub.id ? '' : sub.id)
+                amountRef.current?.focus({ preventScroll: true })
+              }}
+              aria-pressed={subCategory === sub.id}
+              className={cn(
+                'rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                subCategory === sub.id
+                  ? 'bg-accent/15 text-ink ring-1 ring-accent/60'
+                  : 'bg-line/[0.06] text-sub hover:text-ink',
+              )}
+            >
+              {subCategoryLabel(sub.id)}
+            </button>
+          ))}
         </div>
       </Collapse>
 
@@ -204,6 +262,7 @@ export function AddSheet({
         </label>
         <Input
           type="text"
+          enterKeyHint="done"
           maxLength={PAYER_MAX}
           placeholder="e.g. Mom, employer, client"
           value={payer}
@@ -225,6 +284,7 @@ export function AddSheet({
       </label>
       <Input
         type="text"
+        enterKeyHint="done"
         maxLength={NOTE_MAX}
         placeholder="e.g. corner store"
         value={note}
@@ -256,6 +316,7 @@ export function AddSheet({
         </span>
       </button>
 
+      </form>
     </AdaptiveDialog>
   )
 }

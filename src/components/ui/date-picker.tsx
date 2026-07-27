@@ -97,10 +97,11 @@ export function DatePicker({
               mobile ? 'relative mt-2' : 'absolute left-0 right-0 top-[calc(100%+8px)]',
               ACCENT_VAR[accent],
             )}
-            initial={still ? { opacity: 0 } : { opacity: 0, height: 0, y: -4 }}
-            animate={still ? { opacity: 1 } : { opacity: 1, height: 'auto', y: 0 }}
-            exit={still ? { opacity: 0 } : { opacity: 0, height: 0, y: -4 }}
-            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            // Без анимации height: она пересчитывает раскладку каждый кадр.
+            initial={still ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.99 }}
+            animate={still ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={still ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.99 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className="p-3">
               <React.Suspense fallback={<CalendarSkeleton />}>

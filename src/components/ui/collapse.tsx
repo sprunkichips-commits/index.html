@@ -7,8 +7,9 @@ import { AnimatePresence, m, useReducedMotion } from 'framer-motion'
  * «от кого» — только у дохода. Без анимации форма скачет, и глаз теряет место,
  * на котором остановился.
  *
- * height: auto анимируется корректно только когда содержимое обрезано
- * (overflow-hidden), иначе оно вылезает за пределы во время движения.
+ * Анимируются ТОЛЬКО opacity и transform. Высоту не трогаем намеренно: её
+ * анимация заставляет браузер пересчитывать раскладку каждый кадр, и на
+ * телефоне это видно как рывок — ровно то, от чего уходим на экране ввода.
  */
 export function Collapse({ show, children }: { show: boolean; children: React.ReactNode }) {
   const still = useReducedMotion()
@@ -16,11 +17,10 @@ export function Collapse({ show, children }: { show: boolean; children: React.Re
     <AnimatePresence initial={false}>
       {show && (
         <m.div
-          className="overflow-hidden"
-          initial={still ? { opacity: 0 } : { opacity: 0, height: 0 }}
-          animate={still ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
-          exit={still ? { opacity: 0 } : { opacity: 0, height: 0 }}
-          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+          initial={still ? { opacity: 0 } : { opacity: 0, y: -6 }}
+          animate={still ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          exit={still ? { opacity: 0 } : { opacity: 0, y: -6 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         >
           {children}
         </m.div>

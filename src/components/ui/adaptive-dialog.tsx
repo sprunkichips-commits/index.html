@@ -45,6 +45,21 @@ export function AdaptiveDialog({ open, onOpenChange, title, bare, footer, childr
 
 const PANEL = 'glass border-line/12 shadow-lift focus:outline-none'
 
+/**
+ * Фокус на поле с data-autofocus в момент открытия — синхронно, внутри того же
+ * действия пользователя. iOS показывает клавиатуру только на focus() из
+ * пользовательского жеста, поэтому setTimeout здесь не годится; и именно
+ * благодаря синхронности шторка и клавиатура выезжают ОДНОЙ анимацией, а не
+ * одна за другой. Без обработчика Radix увёл бы фокус на кнопку закрытия.
+ */
+function focusFirstField(e: Event) {
+  const root = e.currentTarget as HTMLElement | null
+  const field = root?.querySelector<HTMLElement>('[data-autofocus]')
+  if (!field) return
+  e.preventDefault()
+  field.focus({ preventScroll: true })
+}
+
 function CloseButton() {
   return (
     <Dialog.Close asChild>
@@ -68,68 +83,73 @@ function MobileSheet({ open, onOpenChange, title, bare, footer, children }: Adap
     // repositionInputs={false} — намеренно. Своя подстройка vaul под клавиатуру
     // сдвигает всю шторку вверх, и внутри Telegram на iOS это давало сразу три
     // беды: заголовок уезжал под шапку Telegram, низ обрезался, а между шторкой
-    // и клавиатурой оставалась тёмная полоса. Здесь вместо сдвига шторка просто
-    // садится на клавиатуру (bottom: --kb) и ограничивается видимой высотой.
+    // и клавиатурой оставалась тёмная полоса.
     <Drawer.Root open={open} onOpenChange={onOpenChange} repositionInputs={false}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
-        <Drawer.Content
-          style={{
-            // Низ шторки — по верхней кромке клавиатуры: без зазора и без нахлёста.
-            bottom: 'var(--kb, 0px)',
-            // Выше шапки Telegram не поднимаемся; 12px — воздух, чтобы верхний
-            // край не прилипал вплотную.
-            maxHeight: 'calc(var(--app-vh, 100dvh) - var(--tg-top, 0px) - 12px)',
-          }}
-          className={cn(
-            PANEL,
-            'fixed left-0 right-0 z-50 mx-auto flex w-full max-w-[520px] flex-col',
-            'rounded-t-[26px] border-t',
-          )}
-        >
-          {/* Полоска-ручка: показывает, что шторку можно потянуть, и служит
-              удобной областью захвата для жеста закрытия. */}
-          <div className="mx-auto mt-3 h-1.5 w-10 flex-none rounded-full bg-line/25" />
-
-          {/* Шапка закреплена: не уезжает вместе с содержимым. */}
-          {bare ? (
-            <Drawer.Title className="sr-only">{title}</Drawer.Title>
-          ) : (
-            <div className="flex flex-none items-center justify-between px-5 pb-3 pt-4">
-              <Drawer.Title className="text-lg font-bold">{title}</Drawer.Title>
-              <Drawer.Close asChild>
-                <m.button
-                  type="button"
-                  aria-label="Close"
-                  whileTap={{ scale: 0.95 }}
-                  className="grid h-10 w-10 place-items-center rounded-xl text-sub transition-colors hover:bg-line/[0.08] hover:text-ink"
-                >
-                  <X size={18} />
-                </m.button>
-              </Drawer.Close>
-            </div>
-          )}
-
-          {/* Прокручивается только середина. min-h-0 обязателен: без него
-              flex-элемент не даёт себя сжать, и прокрутка не появляется вовсе —
-              содержимое просто вылезает за пределы шторки. */}
-          <div
-            data-scroll-area
+        {/* Обёртка поднимает шторку над клавиатурой одним transform (см. .kb-lift
+            в index.css). Раньше здесь менялся bottom — это пересчёт раскладки на
+            каждый кадр выезда клавиатуры, то есть ровно тот рывок, от которого
+            уходим. pointer-events-none, чтобы обёртка не перехватывала касания
+            по затемнению. */}
+        <div className="kb-lift pointer-events-none fixed inset-0 z-50">
+          <Drawer.Content
+            onOpenAutoFocus={focusFirstField}
+            style={{
+              // Выше шапки Telegram не поднимаемся; 12px — воздух, чтобы верхний
+              // край не прилипал вплотную.
+              maxHeight: 'calc(var(--app-vh, 100dvh) - var(--tg-top, 0px) - 12px)',
+            }}
             className={cn(
-              'min-h-0 flex-1 overflow-y-auto overscroll-contain px-5',
-              bare && 'pt-4',
-              footer ? 'pb-2' : 'pb-[max(20px,env(safe-area-inset-bottom))]',
+              PANEL,
+              'pointer-events-auto fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-[520px] flex-col',
+              'rounded-t-[26px] border-t',
             )}
           >
-            {children}
-          </div>
+            {/* Полоска-ручка: показывает, что шторку можно потянуть, и служит
+                удобной областью захвата для жеста закрытия. */}
+            <div className="sheet-handle mx-auto mt-3 h-1.5 w-10 flex-none rounded-full bg-line/25" />
 
-          {footer && (
-            <div className="flex-none border-t border-line/10 px-5 pb-[max(16px,calc(env(safe-area-inset-bottom)+var(--tg-bottom,0px)))] pt-3">
-              {footer}
+            {/* Шапка закреплена: не уезжает вместе с содержимым. */}
+            {bare ? (
+              <Drawer.Title className="sr-only">{title}</Drawer.Title>
+            ) : (
+              <div className="sheet-head flex flex-none items-center justify-between px-5 pb-3 pt-4">
+                <Drawer.Title className="text-lg font-bold">{title}</Drawer.Title>
+                <Drawer.Close asChild>
+                  <m.button
+                    type="button"
+                    aria-label="Close"
+                    whileTap={{ scale: 0.95 }}
+                    className="grid h-10 w-10 place-items-center rounded-xl text-sub transition-colors hover:bg-line/[0.08] hover:text-ink"
+                  >
+                    <X size={18} />
+                  </m.button>
+                </Drawer.Close>
+              </div>
+            )}
+
+            {/* Прокручивается только середина. min-h-0 обязателен: без него
+                flex-элемент не даёт себя сжать, и прокрутка не появляется вовсе —
+                содержимое просто вылезает за пределы шторки. */}
+            <div
+              data-scroll-area
+              className={cn(
+                'min-h-0 flex-1 overflow-y-auto overscroll-contain px-5',
+                bare && 'pt-4',
+                footer ? 'pb-2' : 'pb-[max(20px,env(safe-area-inset-bottom))]',
+              )}
+            >
+              {children}
             </div>
-          )}
-        </Drawer.Content>
+
+            {footer && (
+              <div className="flex-none border-t border-line/10 px-5 pb-[max(16px,calc(env(safe-area-inset-bottom)+var(--tg-bottom,0px)))] pt-3">
+                {footer}
+              </div>
+            )}
+          </Drawer.Content>
+        </div>
       </Drawer.Portal>
     </Drawer.Root>
   )
@@ -154,7 +174,7 @@ function DesktopModal({ open, onOpenChange, title, bare, footer, children }: Ada
                 transition={{ duration: 0.18, ease: 'easeOut' }}
               />
             </Dialog.Overlay>
-            <Dialog.Content asChild forceMount>
+            <Dialog.Content asChild forceMount onOpenAutoFocus={focusFirstField}>
               <m.div
                 style={{ maxHeight: 'calc(var(--app-vh, 100dvh) - 4rem)' }}
                 className={cn(
