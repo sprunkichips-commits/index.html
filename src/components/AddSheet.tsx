@@ -198,6 +198,9 @@ export function AddSheet({
       >
         <input
           ref={amountRef}
+          // autoFocus и data-autofocus работают в паре: React ставит фокус при
+          // монтировании, а onOpenAutoFocus в AdaptiveDialog отбирает его у
+          // кнопки закрытия, которую иначе сфокусировал бы Radix.
           autoFocus
           data-autofocus
           type="text"
