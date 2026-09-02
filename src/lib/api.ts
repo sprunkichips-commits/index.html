@@ -302,7 +302,7 @@ export const api = {
    * Таймаут больше обычного: удаление длинной истории — одна транзакция.
    */
   wipeAll: () =>
-    request<{ ok: true; deleted: Record<string, number> }>('/api/data', {
+    request<{ ok: true; deleted: Record<string, number>; missing?: string[] }>('/api/data', {
       method: 'DELETE',
       timeoutMs: 60000,
     }),

@@ -71,6 +71,8 @@ export interface WipeResult {
   ok: boolean
   error?: string
   deleted?: Record<string, number>
+  /** Таблиц нет в базе — стирать в них было нечего (диагностика схемы). */
+  missing?: string[]
 }
 
 /** Состояние связи с облаком: облако — источник правды, локально — кэш чтения. */
@@ -454,6 +456,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [restore])
 
   /**
+   * Запасное удаление: перебрать операции и удалить каждую по отдельности.
+   * Нужен, если общее удаление на сервере отказало — например, в базе нет
+   * какой-то таблицы. Пачками по 5, чтобы не открывать сотню запросов разом.
+   */
+  const wipeOneByOne = useCallback(async (): Promise<{ ok: boolean; n: number; error?: string }> => {
+    try {
+      const { from, to } = fullRange()
+      const { items } = await api.transactions({ from, to })
+      let n = 0
+      for (let i = 0; i < items.length; i += 5) {
+        const chunk = items.slice(i, i + 5)
+        await Promise.all(chunk.map((t) => api.deleteTransaction(t.id)))
+        n += chunk.length
+      }
+      return { ok: true, n }
+    } catch (e) {
+      return { ok: false, n: 0, error: e instanceof ApiError ? e.message : 'Unknown error' }
+    }
+  }, [])
+
+  /**
    * Полное стирание. Раньше кнопка «Clear all» очищала только состояние в
    * памяти через persist(): в облаке (D1) записи оставались, и следующая же
    * синхронизация возвращала их обратно — удаление выглядело сделанным ровно
@@ -468,14 +491,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    */
   const clearAll = useCallback(async (): Promise<WipeResult> => {
     let deleted: Record<string, number> | undefined
+    let missing: string[] | undefined
     if (authedRef.current) {
       try {
         const res = await api.wipeAll()
         deleted = res.deleted
+        missing = res.missing
       } catch (e) {
-        const msg = e instanceof ApiError ? e.message : 'Unknown error'
-        setCloud('offline')
-        return { ok: false, error: msg }
+        // Запасной путь: удаляем операции по одной — тем же вызовом, которым
+        // работает корзина в списке. Он проверен ежедневной работой, поэтому
+        // сработает даже если общее удаление на сервере почему-то не прошло.
+        // Цели и профиль в базе при этом останутся, но приложение их оттуда
+        // не читает (они живут в Telegram), а на экране всё будет пусто.
+        const first = e instanceof ApiError ? e.message : 'Unknown error'
+        const fb = await wipeOneByOne()
+        if (!fb.ok) {
+          setCloud('offline')
+          // Один и тот же текст дважды («Network error / Network error») ничего
+          // не добавляет — показываем причину один раз.
+          const both = fb.error && fb.error !== first ? `${first}\n${fb.error}` : first
+          return { ok: false, error: both }
+        }
+        deleted = { transactions: fb.n }
       }
     }
 
@@ -512,8 +549,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
 
     setCloud(authedRef.current ? 'synced' : 'off')
-    return { ok: true, deleted }
-  }, [])
+    return { ok: true, deleted, missing }
+  }, [wipeOneByOne])
 
   // ----- Старт: тема + Telegram + гидратация из CloudStorage -----
   const booted = useRef(false)

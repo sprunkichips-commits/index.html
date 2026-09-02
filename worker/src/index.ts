@@ -340,8 +340,15 @@ app.delete('/api/transactions/:id', async (c) => {
 //
 // Два обязательных свойства:
 //   * user_id в КАЖДОМ запросе — иначе можно было бы стереть чужие данные;
-//   * batch — D1 выполняет его одной транзакцией, поэтому «половина удалилась,
-//     половина нет» невозможно.
+//   * таблицы удаляются ПООЧЕРЁДНО, а не одним db.batch.
+//
+// Почему не batch, хотя он атомарен: batch падает целиком, если хоть один
+// запрос не выполнился. В боевой базе часть таблиц может отсутствовать
+// (схема применялась через консоль D1, а она умеет склеивать файл в одну
+// строку — см. предупреждение в worker/schema.sql), и тогда «no such table:
+// task_log» отменял удаление ВСЕГО, включая операции. Пользователь получал
+// голое internal_error и данные на месте. Теперь отсутствующая таблица —
+// просто «стирать нечего», а не отказ.
 //
 // Справочники категорий общие для всех и не трогаются.
 
@@ -349,16 +356,47 @@ app.delete('/api/data', async (c) => {
   const userId = c.get('userId')
   const db = c.env.DB
 
-  // Порядок — от зависимых к главным: task_log ссылается на привычки.
+  // transactions первой: это главные данные. Если дальше что-то сломается,
+  // важное уже удалено. Остальные — от зависимых к главным.
   const tables = ['transactions', 'task_log', 'daily_tasks', 'goals', 'profile'] as const
-  const res = await db.batch(
-    tables.map((t) => db.prepare(`DELETE FROM ${t} WHERE user_id = ?1`).bind(userId)),
-  )
 
   const deleted: Record<string, number> = {}
-  tables.forEach((t, i) => (deleted[t] = res[i]?.meta?.changes ?? 0))
-  console.log('DATA WIPED', JSON.stringify({ userId, deleted }))
-  return c.json({ ok: true, deleted })
+  const missing: string[] = []
+  const failed: Record<string, string> = {}
+
+  for (const t of tables) {
+    try {
+      const r = await db.prepare(`DELETE FROM ${t} WHERE user_id = ?1`).bind(userId).run()
+      deleted[t] = r.meta?.changes ?? 0
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/no such table/i.test(msg)) {
+        // Таблицы нет вовсе — стирать в ней нечего, это не ошибка.
+        missing.push(t)
+        deleted[t] = 0
+      } else {
+        failed[t] = msg
+      }
+    }
+  }
+
+  console.log('DATA WIPE', JSON.stringify({ userId, deleted, missing, failed }))
+
+  // Операции не удалились — это провал: говорим прямо и настоящей причиной,
+  // а не общим internal_error, иначе на экране опять будет загадка.
+  if (failed.transactions) {
+    return c.json(
+      { error: 'wipe_failed', message: `Could not delete transactions: ${failed.transactions}`, failed },
+      500,
+    )
+  }
+
+  return c.json({
+    ok: true,
+    deleted,
+    ...(missing.length ? { missing } : {}),
+    ...(Object.keys(failed).length ? { failed } : {}),
+  })
 })
 
 // ---------- Перенос данных из бэкапа ----------

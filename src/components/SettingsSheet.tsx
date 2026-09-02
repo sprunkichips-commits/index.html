@@ -127,6 +127,13 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       await goals.wipeGoals()
       const n = res.deleted?.transactions ?? 0
       toast(n ? `Deleted everything (${n} records)` : 'Deleted everything')
+      // Диагностика схемы: если в базе не хватает таблиц, об этом лучше знать —
+      // тот же перенос целей из бэкапа в такую базу тоже не сохранится.
+      if (res.missing?.length) {
+        tgAlert(
+          `Deleted everything.\n\nNote: your database has no ${res.missing.join(', ')} table(s). Nothing was lost now, but re-applying worker/schema.sql would fix future imports.`,
+        )
+      }
       onOpenChange(false)
     } finally {
       setWiping(false)
