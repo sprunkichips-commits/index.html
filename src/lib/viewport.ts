@@ -17,10 +17,23 @@
 
 import { TG } from './telegram'
 
+/**
+ * Читает переменную-длину. Принимаются ТОЛЬКО пиксели — всё остальное считаем
+ * «величина неизвестна» и полагаемся на visualViewport.
+ *
+ * Пользовательские свойства браузер не вычисляет: getPropertyValue отдаёт ровно
+ * тот текст, который записали. Вне Telegram скрипт telegram-web-app.js
+ * (он подключён на всех страницах ради кнопки входа) пишет
+ * `--tg-viewport-height: 100vh` — высота ещё не известна. Прежний parseFloat
+ * доставал из этой строки число 100 и принимал его за ПИКСЕЛИ: на сайте в
+ * обычном браузере --app-vh становилась 100px, и окно «New transaction»
+ * схлопывалось в полоску высотой 36px (100px − 4rem запаса).
+ */
 function readPx(name: string): number | null {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-  if (!raw) return null
-  const n = parseFloat(raw)
+  const m = /^(-?\d*\.?\d+)px$/.exec(raw)
+  if (!m) return null
+  const n = parseFloat(m[1])
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
