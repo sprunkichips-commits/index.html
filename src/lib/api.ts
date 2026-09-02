@@ -296,6 +296,17 @@ export const api = {
   deleteTransaction: (id: string) =>
     request<{ ok: true }>(`/api/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  /**
+   * Необратимо удаляет ВСЕ данные пользователя в облаке: операции, цели,
+   * привычки и профиль. Подтверждение спрашивается на экране до вызова.
+   * Таймаут больше обычного: удаление длинной истории — одна транзакция.
+   */
+  wipeAll: () =>
+    request<{ ok: true; deleted: Record<string, number> }>('/api/data', {
+      method: 'DELETE',
+      timeoutMs: 60000,
+    }),
+
   stats: (period?: Period, signal?: AbortSignal) =>
     request<ApiStats>('/api/stats' + periodQuery(period), { signal }),
 

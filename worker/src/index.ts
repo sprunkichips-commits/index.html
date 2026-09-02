@@ -333,6 +333,34 @@ app.delete('/api/transactions/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+// ---------- Полное удаление своих данных ----------
+// Пользователь стирает всё, что о нём хранится: операции, цели, привычки,
+// журнал привычек и профиль. Действие необратимое — подтверждение спрашивает
+// клиент, здесь только исполнение.
+//
+// Два обязательных свойства:
+//   * user_id в КАЖДОМ запросе — иначе можно было бы стереть чужие данные;
+//   * batch — D1 выполняет его одной транзакцией, поэтому «половина удалилась,
+//     половина нет» невозможно.
+//
+// Справочники категорий общие для всех и не трогаются.
+
+app.delete('/api/data', async (c) => {
+  const userId = c.get('userId')
+  const db = c.env.DB
+
+  // Порядок — от зависимых к главным: task_log ссылается на привычки.
+  const tables = ['transactions', 'task_log', 'daily_tasks', 'goals', 'profile'] as const
+  const res = await db.batch(
+    tables.map((t) => db.prepare(`DELETE FROM ${t} WHERE user_id = ?1`).bind(userId)),
+  )
+
+  const deleted: Record<string, number> = {}
+  tables.forEach((t, i) => (deleted[t] = res[i]?.meta?.changes ?? 0))
+  console.log('DATA WIPED', JSON.stringify({ userId, deleted }))
+  return c.json({ ok: true, deleted })
+})
+
 // ---------- Перенос данных из бэкапа ----------
 // Принимает файл, который отдаёт «Settings → Download file». Импорт только
 // добавляет записи и не создаёт дублей при повторной загрузке того же файла.

@@ -6,7 +6,7 @@ import { Textarea } from './ui/input'
 import { useStore } from '@/store/StoreContext'
 import { useGoals } from '@/store/GoalsContext'
 import { api, ApiError, type ImportReport } from '@/lib/api'
-import { hasCloud, tgUserId } from '@/lib/telegram'
+import { hasCloud, tgAlert, tgConfirm, tgUserId } from '@/lib/telegram'
 import { today } from '@/lib/format'
 import { fmtDateLong } from '@/lib/format'
 import { downloadText, goalsCsv, invCsv, txCsv } from '@/lib/csv'
@@ -18,6 +18,7 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     useStore()
   const goals = useGoals()
   const [text, setText] = useState('')
+  const [wiping, setWiping] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const cloudFileRef = useRef<HTMLInputElement>(null)
   // Состояние переноса в облако: idle → sending → отчёт или ошибка.
@@ -98,6 +99,38 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     }
     r.onerror = () => setUpload({ busy: false, report: null, error: 'Could not read the file' })
     r.readAsText(f)
+  }
+
+  /**
+   * Полное стирание по кнопке «Clear all».
+   *
+   * Порядок важен: сначала облако (пока записи в базе, локальная очистка живёт
+   * до первой синхронизации), затем локальные копии и Telegram. Если облако не
+   * ответило — честно показываем причину и НЕ говорим «удалено».
+   *
+   * Подтверждение — через tgConfirm: внутри Telegram window.confirm не
+   * показывается вовсе, и кнопка молча ничего не делала бы.
+   */
+  async function wipeEverything() {
+    const ok = await tgConfirm(
+      'Delete everything?\n\nAll transactions, goals, habits and your profile will be permanently deleted — in the cloud and on this device. This cannot be undone.\n\nDownload a backup first if you might need the data.',
+    )
+    if (!ok) return
+    setWiping(true)
+    try {
+      const res = await clearAll()
+      if (!res.ok) {
+        tgAlert(`Nothing was deleted.\n\n${res.error ?? 'Unknown error'}`)
+        toast('Could not delete')
+        return
+      }
+      await goals.wipeGoals()
+      const n = res.deleted?.transactions ?? 0
+      toast(n ? `Deleted everything (${n} records)` : 'Deleted everything')
+      onOpenChange(false)
+    } finally {
+      setWiping(false)
+    }
   }
 
   async function restoreFromSnapshot() {
@@ -397,18 +430,16 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
         >
           Fill with example
         </Button>
-        <Button
-          variant="danger"
-          onClick={() => {
-            if (window.confirm('Delete all transactions?')) {
-              clearAll()
-              onOpenChange(false)
-            }
-          }}
-        >
-          <Trash2 size={15} /> Clear all
+        <Button variant="danger" disabled={wiping} onClick={wipeEverything}>
+          {wiping ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+          {wiping ? 'Deleting…' : 'Clear all'}
         </Button>
       </div>
+      {/* Кнопка необратимая — говорим об этом до нажатия, а не только в попапе. */}
+      <p className="mt-2 text-[12px] leading-relaxed text-faint">
+        «Clear all» deletes everything — transactions, goals, habits and profile — in the cloud and on
+        this device. This cannot be undone.
+      </p>
 
       {/* Версия сборки и адрес, с которого открыто приложение. Адрес важен:
           со старого хостинга облачное сохранение не работает (там только файлы). */}

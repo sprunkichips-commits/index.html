@@ -140,6 +140,16 @@ export function sset(k: string, v: string): boolean {
   }
 }
 
+/** Удаляет ключ из localStorage (и из памяти-запасника). */
+export function srem(k: string): void {
+  try {
+    localStorage.removeItem(k)
+  } catch {
+    /* приватный режим/квота — ниже подчищаем запасник */
+  }
+  delete mem[k]
+}
+
 /**
  * Ежедневный автоснимок: перед ПЕРВЫМ изменением за день откладывает текущее
  * значение ключа в key+'-snap' ({d: дата, v: значение}). Даёт «вчерашнюю»

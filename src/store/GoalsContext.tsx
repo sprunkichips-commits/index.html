@@ -20,7 +20,7 @@ import {
   TITLE_MAX,
 } from '@/lib/goals'
 import { uid, validDate } from '@/lib/data'
-import { GKEY, bigGet, bigSet, dailySnapshot, readSnapshot, sget, sset } from '@/lib/storage'
+import { GKEY, bigGet, bigSet, dailySnapshot, readSnapshot, sget, srem, sset } from '@/lib/storage'
 import { hasCloud, tgUserId } from '@/lib/telegram'
 import { decryptJSON, deriveAutoKey, encryptJSON, hasCrypto } from '@/lib/crypto'
 import { useStore } from './StoreContext'
@@ -43,6 +43,8 @@ interface GoalsStore {
   restoreGoals: (obj: unknown) => void
   restoreGoalsSnapshot: () => Promise<boolean>
   clearAllGoals: () => void
+  /** Необратимо стирает цели и привычки: локально и в Telegram. */
+  wipeGoals: () => Promise<void>
 }
 
 const Ctx = createContext<GoalsStore | null>(null)
@@ -297,17 +299,37 @@ export function GoalsProvider({ children }: { children: ReactNode }) {
     apply(emptyGoals())
   }, [apply])
 
+  /**
+   * Полное стирание целей и привычек — часть кнопки «Clear all» в настройках.
+   *
+   * Отличается от clearAllGoals тем, что снимает оба предохранителя persist():
+   * «не писать, пока не прочитали облако» и «не затирать непустое пустым». Они
+   * защищают от случайной потери, но здесь стирание намеренное — без их снятия
+   * копия целей оставалась в Telegram и возвращалась при следующем запуске.
+   */
+  const wipeGoals = useCallback(async () => {
+    cloudLoadOk.current = true
+    cloudHadData.current = false
+    const empty = emptyGoals()
+    dirty.current = true
+    dataRef.current = empty
+    setData(empty)
+    await persist(empty)
+    srem(GKEY + '-snap') // автоснимок начала дня
+    srem(GKEY + '-bak') // копия нечитаемого конверта, если была
+  }, [persist])
+
   const streak = useMemo(() => computeStreak(data.logs, todayKey), [data.logs, todayKey])
 
   const value = useMemo<GoalsStore>(
     () => ({
       status, data, encrypted, streak, todayKey,
       addGoal, editGoal, delGoal, addTask, editTask, delTask, toggleToday,
-      restoreGoals, restoreGoalsSnapshot, clearAllGoals,
+      restoreGoals, restoreGoalsSnapshot, clearAllGoals, wipeGoals,
     }),
     [
       status, data, encrypted, streak, todayKey, addGoal, editGoal, delGoal, addTask, editTask, delTask,
-      toggleToday, restoreGoals, restoreGoalsSnapshot, clearAllGoals,
+      toggleToday, restoreGoals, restoreGoalsSnapshot, clearAllGoals, wipeGoals,
     ],
   )
 

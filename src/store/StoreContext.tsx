@@ -34,7 +34,7 @@ import {
 } from '@/lib/data'
 import {
   CSKEY, KEY, MKEY, PKEY, TKEY,
-  bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, sset,
+  bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, srem, sset,
 } from '@/lib/storage'
 import { localDateStr } from '@/lib/goals'
 import { api, ApiError, hasInitData, resolveAuth, type AuthInfo } from '@/lib/api'
@@ -64,6 +64,13 @@ interface AddInvInput {
   type: string
   invested: number
   current: number
+}
+
+/** Итог полного стирания: сколько строк удалено в облаке или почему не вышло. */
+export interface WipeResult {
+  ok: boolean
+  error?: string
+  deleted?: Record<string, number>
 }
 
 /** Состояние связи с облаком: облако — источник правды, локально — кэш чтения. */
@@ -103,7 +110,8 @@ interface Store {
   restore: (obj: unknown) => void
   restoreSnapshot: () => boolean
   loadDemo: () => void
-  clearAll: () => void
+  /** Необратимо удаляет ВСЕ данные: облако, локальную копию, Telegram. */
+  clearAll: () => Promise<WipeResult>
   toast: (m: string) => void
 }
 
@@ -445,11 +453,67 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     restore(DEMO)
   }, [restore])
 
-  const clearAll = useCallback(() => {
-    setCursor(cursorFromData(emptyData()))
-    persist(emptyData())
-    toast('Cleared')
-  }, [persist, toast])
+  /**
+   * Полное стирание. Раньше кнопка «Clear all» очищала только состояние в
+   * памяти через persist(): в облаке (D1) записи оставались, и следующая же
+   * синхронизация возвращала их обратно — удаление выглядело сделанным ровно
+   * до перезагрузки. Плюс предохранитель persist() запрещает писать пустоту
+   * поверх непустого хранилища, поэтому копия в Telegram тоже оставалась.
+   *
+   * Здесь порядок обратный и предохранители сняты осознанно:
+   *   1. сначала облако — пока строки в базе, любое локальное стирание временно;
+   *   2. только после успеха — локальный кэш, автоснимки и копия в Telegram.
+   * Если облако не ответило, НИЧЕГО не стираем и возвращаем причину: соврать
+   * «удалено», оставив данные в базе, хуже, чем честно показать ошибку.
+   */
+  const clearAll = useCallback(async (): Promise<WipeResult> => {
+    let deleted: Record<string, number> | undefined
+    if (authedRef.current) {
+      try {
+        const res = await api.wipeAll()
+        deleted = res.deleted
+      } catch (e) {
+        const msg = e instanceof ApiError ? e.message : 'Unknown error'
+        setCloud('offline')
+        return { ok: false, error: msg }
+      }
+    }
+
+    const empty = emptyData()
+    const emptyStr = JSON.stringify(empty)
+
+    // Локальные копии и всё, из чего данные можно было бы «воскресить».
+    dataDirty.current = true
+    setData(empty)
+    setCursor(cursorFromData(empty))
+    sset(KEY, emptyStr)
+    srem(KEY + '-snap') // автоснимок начала дня
+    srem(KEY + '-bak') // копия испорченной записи, если была
+    setProfileState({ name: '', avatar: '' })
+    srem(PKEY)
+    profileDirty.current = true
+    setDataGuard(null)
+
+    // Отметка «база авторитетна» остаётся включённой намеренно: именно по ней
+    // syncCloud отличает «историю ещё не перенесли» от «всё удалено» и
+    // принимает пустой ответ базы, а не возвращает старый кэш.
+    sset(MKEY, '1')
+
+    if (hasCloud) {
+      // Предохранитель «не затирать непустое пустым» снимаем: это и есть
+      // намеренное стирание, а не сбой чтения.
+      cloudHadData.current = false
+      cloudRowsApplied.current = false
+      await Promise.all([
+        bigSet('data', emptyStr),
+        bigSet('profile', JSON.stringify({ name: '', avatar: '' })),
+        cloudSet('cloudrows', '1'),
+      ])
+    }
+
+    setCloud(authedRef.current ? 'synced' : 'off')
+    return { ok: true, deleted }
+  }, [])
 
   // ----- Старт: тема + Telegram + гидратация из CloudStorage -----
   const booted = useRef(false)
