@@ -33,7 +33,7 @@ import {
   DEMO,
 } from '@/lib/data'
 import {
-  CSKEY, KEY, MKEY, PKEY, TKEY,
+  CSKEY, KEY, MKEY, OBKEY, PKEY, TKEY,
   bigGet, bigSet, cloudGet, cloudSet, dailySnapshot, readSnapshot, sget, srem, sset,
 } from '@/lib/storage'
 import { localDateStr } from '@/lib/goals'
@@ -105,6 +105,13 @@ interface Store {
   setTheme: (t: Theme) => void
   setChartStyle: (s: ChartStyle) => void
   setProfile: (p: Profile) => void
+  /**
+   * Стартовый остаток в рублях: деньги, бывшие на руках ДО первой записи.
+   * Виден ТОЛЬКО в виджете общего остатка — в месячных итогах, категориях и
+   * списке операций его нет: это не операция.
+   */
+  openingBalance: number
+  setOpeningBalance: (rub: number) => Promise<boolean>
   addTx: (input: AddTxInput) => boolean
   delTx: (id: string) => void
   addInv: (input: AddInvInput) => boolean
@@ -143,6 +150,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [filter, setFilter] = useState<Filter>('Все')
   const [notice, setNotice] = useState<string | null>(null)
   const [profile, setProfileState] = useState<Profile>(() => parseProfile(sget(PKEY)))
+  // Храним в копейках целым числом — как и суммы операций, без дрейфа float.
+  const [openingCents, setOpeningCents] = useState<number>(() => {
+    const n = Number(sget(OBKEY))
+    return Number.isFinite(n) ? Math.round(n) : 0
+  })
   const [cloud, setCloud] = useState<CloudState>(() => (hasInitData() ? 'syncing' : 'off'))
   // Внутри Telegram знаем сразу; в браузере ждём ответа сервера про сессию.
   const [auth, setAuth] = useState<AuthState>(() => (hasInitData() ? 'authed' : 'checking'))
@@ -253,6 +265,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     },
     [toast],
+  )
+
+  /**
+   * Стартовый остаток из облака. Источник правды — база: значение должно быть
+   * одинаковым и в Телеграме, и на сайте. localStorage остаётся кэшем, чтобы
+   * виджет показывал верное число сразу, не дожидаясь сети.
+   */
+  const syncSettings = useCallback(() => {
+    if (!authedRef.current) return
+    api
+      .settings()
+      .then((s) => {
+        const cents = Math.round(Number(s.openingBalanceCents) || 0)
+        setOpeningCents(cents)
+        sset(OBKEY, String(cents))
+      })
+      .catch(() => {
+        /* нет связи — остаётся кэш; отдельного предупреждения не нужно */
+      })
+  }, [])
+
+  const setOpeningBalance = useCallback(
+    async (rub: number): Promise<boolean> => {
+      const cents = Math.round((Number(rub) || 0) * 100)
+      const prev = openingCents
+      // Показываем сразу, отправляем следом — как и с операциями.
+      setOpeningCents(cents)
+      sset(OBKEY, String(cents))
+      if (!authedRef.current) return true
+      try {
+        await api.saveSettings(cents)
+        return true
+      } catch (e) {
+        // Откатываем: на экране не должно остаться число, которого нет в базе.
+        setOpeningCents(prev)
+        sset(OBKEY, String(prev))
+        const msg = e instanceof ApiError ? e.message : 'Unknown error'
+        tgAlert(`Starting balance not saved\n\n${msg}`)
+        toast('Not saved to the cloud')
+        return false
+      }
+    },
+    [openingCents, toast],
   )
 
   const shiftMonth = useCallback((delta: number) => {
@@ -528,6 +583,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     srem(KEY + '-bak') // копия испорченной записи, если была
     setProfileState({ name: '', avatar: '' })
     srem(PKEY)
+    setOpeningCents(0) // стартовый остаток — тоже часть «всё сбросить»
+    srem(OBKEY)
     profileDirty.current = true
     setDataGuard(null)
 
@@ -566,8 +623,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       authedRef.current = info.authenticated
       setAuthInfo(info)
       setAuth(info.authenticated ? 'authed' : 'anon')
-      if (info.authenticated) syncCloud()
-      else setCloud('off')
+      if (info.authenticated) {
+        syncCloud()
+        syncSettings()
+      } else setCloud('off')
     })
     // Запись есть, но JSON не читается (порча/обрыв записи)? Прячем копию в
     // -bak: дальнейшие сохранения перезапишут KEY, а исходник останется.
@@ -703,12 +762,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       restoreSnapshot,
       loadDemo,
       clearAll,
+      openingBalance: openingCents / 100,
+      setOpeningBalance,
       toast,
     }),
     [
       data, theme, chartStyle, cursor, tab, filter, notice, cloud, syncCloud, dataGuard, auth, authInfo, firstName, profile, displayName,
       shiftMonth, toggleTheme, setTheme, setChartStyle, setProfile, addTx, delTx, addInv, delInv,
-      restore, restoreSnapshot, loadDemo, clearAll, toast,
+      restore, restoreSnapshot, loadDemo, clearAll, openingCents, setOpeningBalance, toast,
     ],
   )
 

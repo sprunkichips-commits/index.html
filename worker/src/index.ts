@@ -333,6 +333,84 @@ app.delete('/api/transactions/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+// ---------- Личные настройки: стартовый остаток ----------
+// «Стартовый остаток» — деньги, которые были на руках ДО первой записи в
+// приложении. Он не операция: в месячных итогах, категориях и списке его нет
+// и быть не должно — он участвует только в виджете «Total balance», который
+// отвечает на вопрос «сколько у меня всего денег сейчас».
+//
+// Таблица создаётся по требованию (CREATE TABLE IF NOT EXISTS) прямо здесь.
+// Так сделано намеренно: применять схему в боевой базе приходится руками через
+// консоль D1, и там уже терялись таблицы. Запрос идемпотентный — лишний вызов
+// ничего не портит.
+
+async function ensureSettingsTable(db: D1Database): Promise<void> {
+  await db
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS user_settings (
+         user_id               INTEGER PRIMARY KEY,
+         opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+         updated_at            INTEGER NOT NULL
+       )`,
+    )
+    .run()
+}
+
+app.get('/api/settings', async (c) => {
+  const userId = c.get('userId')
+  await ensureSettingsTable(c.env.DB)
+  const row = await c.env.DB.prepare(
+    `SELECT opening_balance_cents AS cents, updated_at AS updatedAt
+       FROM user_settings WHERE user_id = ?1`,
+  )
+    .bind(userId)
+    .first<{ cents: number; updatedAt: number }>()
+
+  const cents = row?.cents ?? 0
+  return c.json({
+    openingBalanceCents: cents,
+    openingBalance: centsToRub(cents),
+    updatedAt: row?.updatedAt ?? 0,
+  })
+})
+
+app.put('/api/settings', async (c) => {
+  const userId = c.get('userId')
+  let body: { openingBalance?: unknown; openingBalanceCents?: unknown }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json(badRequest('invalid JSON'), 400)
+  }
+
+  // Считаем в копейках. Рубли принимаем тоже, но округляем здесь, а не на
+  // клиенте: одно место округления — одна и та же копейка на всех устройствах.
+  const raw =
+    body.openingBalanceCents != null
+      ? Number(body.openingBalanceCents)
+      : Math.round(Number(body.openingBalance) * 100)
+
+  // Отрицательный остаток допустим (можно быть в минусе), а вот мусор и
+  // бесконечности — нет.
+  if (!Number.isFinite(raw) || Math.abs(raw) > MAX_AMOUNT_CENTS) {
+    return c.json(badRequest('openingBalance is out of range'), 400)
+  }
+  const cents = Math.round(raw)
+
+  await ensureSettingsTable(c.env.DB)
+  await c.env.DB.prepare(
+    `INSERT INTO user_settings (user_id, opening_balance_cents, updated_at)
+     VALUES (?1, ?2, ?3)
+     ON CONFLICT(user_id) DO UPDATE SET
+       opening_balance_cents = excluded.opening_balance_cents,
+       updated_at            = excluded.updated_at`,
+  )
+    .bind(userId, cents, Date.now())
+    .run()
+
+  return c.json({ openingBalanceCents: cents, openingBalance: centsToRub(cents) })
+})
+
 // ---------- Полное удаление своих данных ----------
 // Пользователь стирает всё, что о нём хранится: операции, цели, привычки,
 // журнал привычек и профиль. Действие необратимое — подтверждение спрашивает
@@ -358,7 +436,7 @@ app.delete('/api/data', async (c) => {
 
   // transactions первой: это главные данные. Если дальше что-то сломается,
   // важное уже удалено. Остальные — от зависимых к главным.
-  const tables = ['transactions', 'task_log', 'daily_tasks', 'goals', 'profile'] as const
+  const tables = ['transactions', 'task_log', 'daily_tasks', 'goals', 'profile', 'user_settings'] as const
 
   const deleted: Record<string, number> = {}
   const missing: string[] = []

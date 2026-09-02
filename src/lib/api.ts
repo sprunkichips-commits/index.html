@@ -79,7 +79,7 @@ function authFailureText(reason?: string): string {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
   signal?: AbortSignal
   /** Таймаут запроса, мс. Мобильная сеть может «висеть» — не ждём вечно. */
@@ -224,6 +224,12 @@ export interface ApiSubCategoryStats {
   items: { subcategoryId: string | null; name: string; totalCents: number; total: number; percent: number }[]
 }
 
+export interface ApiSettings {
+  openingBalanceCents: number
+  openingBalance: number
+  updatedAt?: number
+}
+
 export interface NewTransaction {
   date: string
   type: 'income' | 'expense'
@@ -295,6 +301,16 @@ export const api = {
 
   deleteTransaction: (id: string) =>
     request<{ ok: true }>(`/api/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /**
+   * Личные настройки. Пока в них одно значение — стартовый остаток: деньги,
+   * бывшие на руках до первой записи. Он не операция и в статистику не входит.
+   */
+  settings: (signal?: AbortSignal) =>
+    request<ApiSettings>('/api/settings', { signal }),
+
+  saveSettings: (openingBalanceCents: number) =>
+    request<ApiSettings>('/api/settings', { method: 'PUT', body: { openingBalanceCents } }),
 
   /**
    * Необратимо удаляет ВСЕ данные пользователя в облаке: операции, цели,

@@ -98,6 +98,19 @@ CREATE TABLE IF NOT EXISTS profile (
   avatar  TEXT NOT NULL DEFAULT ''
 );
 
+/* ---------- Личные настройки ----------
+ * opening_balance_cents — «стартовый остаток»: деньги, которые были на руках
+ * ДО первой записи в приложении. Это НЕ операция: в месячных итогах и
+ * категориях его нет, он участвует только в виджете общего остатка.
+ * Воркер создаёт эту таблицу сам при первом обращении, здесь она для
+ * полноты схемы на чистой базе.
+ */
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id               INTEGER PRIMARY KEY,
+  opening_balance_cents INTEGER NOT NULL DEFAULT 0,
+  updated_at            INTEGER NOT NULL
+);
+
 /* ---------- Наполнение справочников ----------
  * id категорий совпадают с ключами на клиенте, чтобы перенос старых данных
  * был однозначным (см. worker/src/import.ts).

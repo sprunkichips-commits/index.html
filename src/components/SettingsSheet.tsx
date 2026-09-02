@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, CloudUpload, Copy, Download, FileSpreadsheet, History, Loader2, Moon, Sun, Target, TrendingUp, Trash2, Upload } from 'lucide-react'
 import { Sheet } from './ui/sheet'
 import { Button } from './ui/button'
@@ -7,18 +7,24 @@ import { useStore } from '@/store/StoreContext'
 import { useGoals } from '@/store/GoalsContext'
 import { api, ApiError, type ImportReport } from '@/lib/api'
 import { hasCloud, tgAlert, tgConfirm, tgUserId } from '@/lib/telegram'
-import { today } from '@/lib/format'
+import { grpAmount, parseAmount, rub, today } from '@/lib/format'
 import { fmtDateLong } from '@/lib/format'
 import { downloadText, goalsCsv, invCsv, txCsv } from '@/lib/csv'
 import { GKEY, KEY, readSnapshot } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll, toast, cloud, auth, profile, setProfile } =
-    useStore()
+  const {
+    data, theme, setTheme, chartStyle, setChartStyle, restore, restoreSnapshot, loadDemo, clearAll,
+    toast, cloud, auth, profile, setProfile, openingBalance, setOpeningBalance,
+  } = useStore()
   const goals = useGoals()
   const [text, setText] = useState('')
   const [wiping, setWiping] = useState(false)
+  // Поле стартового остатка: держим текстом, чтобы разряды набирались как в
+  // форме операции; в число превращаем при сохранении.
+  const [opening, setOpening] = useState('')
+  const [savingOpening, setSavingOpening] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const cloudFileRef = useRef<HTMLInputElement>(null)
   // Состояние переноса в облако: idle → sending → отчёт или ошибка.
@@ -27,6 +33,12 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
     report: null,
     error: null,
   })
+
+  // При каждом открытии подставляем сохранённое значение: поле показывает то,
+  // что реально учтено, а не остаток прошлого ввода.
+  useEffect(() => {
+    if (open) setOpening(openingBalance ? grpAmount(String(openingBalance)) : '')
+  }, [open, openingBalance])
 
   // Дата самого свежего автоснимка (финансы/цели) — пересчитываем при открытии.
   const snapDate = useMemo(() => {
@@ -137,6 +149,18 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       onOpenChange(false)
     } finally {
       setWiping(false)
+    }
+  }
+
+  /** Сохранить стартовый остаток. Пустое поле = 0, то есть «выключено». */
+  async function saveOpening() {
+    setSavingOpening(true)
+    try {
+      const value = opening.trim() ? parseAmount(opening) : 0
+      const ok = await setOpeningBalance(value)
+      if (ok) toast(value ? `Starting balance: ${rub(value)}` : 'Starting balance turned off')
+    } finally {
+      setSavingOpening(false)
     }
   }
 
@@ -271,6 +295,40 @@ export function SettingsSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           other device.
         </p>
       )}
+
+      {/* Стартовый остаток: деньги, бывшие на руках ДО первой записи.
+          Отдельная настройка, а не операция, — иначе он попал бы в доходы
+          месяца и в категории и перекосил бы всю статистику. */}
+      <div className={cn(cap, 'mb-2')}>Starting balance</div>
+      <p className="mb-2 text-[13px] leading-relaxed text-sub">
+        Money you already had before your first record here. It is added to{' '}
+        <b className="text-ink">Total balance</b> only — never to monthly totals, categories or the
+        transaction list.
+      </p>
+      <div className="mb-2 flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-xl border border-line/12 bg-line/[0.04] px-3">
+          <input
+            type="text"
+            inputMode="decimal"
+            enterKeyHint="done"
+            placeholder="0"
+            value={opening}
+            onChange={(e) => setOpening(grpAmount(e.target.value))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void saveOpening()
+            }}
+            className="mono h-11 w-full bg-transparent text-base font-semibold outline-none placeholder:text-faint"
+          />
+          <span className="text-sm font-semibold text-faint">₽</span>
+        </div>
+        <Button variant="accent" disabled={savingOpening} onClick={saveOpening}>
+          {savingOpening ? <Loader2 size={15} className="animate-spin" /> : null} Save
+        </Button>
+      </div>
+      <p className="mb-5 text-[12px] leading-relaxed text-faint">
+        Now in Total balance: <b className="text-sub">{rub(openingBalance)}</b>. Set it to 0 to turn
+        this off.
+      </p>
 
       <div className={cn(cap, 'mb-2')}>Backup</div>
       <div className="mb-5 grid grid-cols-2 gap-2">

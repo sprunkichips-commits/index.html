@@ -13,6 +13,9 @@ export const CSKEY = 'pm-finance-chartstyle-v1' // localStorage: стиль гр
 // перенесли в облако» (пустую базу принимать нельзя) и «все записи удалены,
 // в том числе с другого устройства» (пустоту принять обязаны).
 export const MKEY = 'pm-finance-cloud-rows-v1'
+// localStorage: стартовый остаток в копейках (кэш; источник правды — база D1).
+// Деньги, которые были на руках ДО первой записи в приложении.
+export const OBKEY = 'pm-finance-opening-cents-v1'
 // CloudStorage: данные в чанках под именем "data" (data_0…/data_n), тема в "theme",
 // профиль в чанках под именем "profile" (аватар не влезает в один ключ 4096).
 

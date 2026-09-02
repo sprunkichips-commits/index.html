@@ -21,10 +21,15 @@ import { cn } from '@/lib/utils'
  * списком операций и обновляется сразу после добавления или удаления.
  */
 export function TotalBalance() {
-  const { data } = useStore()
-  const b = useMemo(() => computeBalance(data.transactions, localDateStr()), [data.transactions])
+  const { data, openingBalance } = useStore()
+  const b = useMemo(
+    () => computeBalance(data.transactions, localDateStr(), Math.round(openingBalance * 100)),
+    [data.transactions, openingBalance],
+  )
   const monthShort = MS[new Date().getMonth()]
-  const empty = b.count === 0
+  // Пусто — это когда нет ни операций, ни стартового остатка. Один только
+  // стартовый остаток уже осмысленное число, его показываем.
+  const empty = b.count === 0 && b.opening === 0
 
   return (
     <Card hover className="overflow-hidden p-5">
@@ -90,6 +95,15 @@ export function TotalBalance() {
               value={rub(b.expense)}
             />
           </div>
+
+          {/* Стартовый остаток виден только здесь — в статистику он не входит,
+              и без этой строки его происхождение было бы непонятно. */}
+          {b.opening !== 0 && (
+            <div className="mt-3 flex items-center gap-1.5 text-[11px] text-faint">
+              <Wallet size={12} className="flex-none" />
+              includes {rub(b.opening)} you had before the first record
+            </div>
+          )}
 
           <div className="mt-3 text-[11px] text-faint">
             All time · {b.count} {b.count === 1 ? 'record' : 'records'}
