@@ -6,6 +6,7 @@ import { computeStats } from '@/lib/data'
 import { rub, rubS } from '@/lib/format'
 import { Card } from '@/components/ui/card'
 import { TxRow } from '@/components/TxRow'
+import { TotalBalance } from '@/components/TotalBalance'
 import { cn } from '@/lib/utils'
 import type { Tx, TxType } from '@/lib/data'
 
@@ -67,6 +68,9 @@ export function Dashboard({
           <Bell size={18} />
         </button>
       </div>
+
+      {/* Реальный остаток — по всей истории, отдельно от месячного итога ниже */}
+      <TotalBalance />
 
       {/* Баланс за месяц */}
       <Card hover className="overflow-hidden p-5">
